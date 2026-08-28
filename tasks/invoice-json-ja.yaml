@@ -65,7 +65,13 @@ schema:
           amount: {type: integer}
 
 # 採点。ここに挙げた項目がすべて正解と一致したら、そのサンプルは合格。
+#
+# collapse_whitespace: 文字列を比べる前に空白をすべて落とす。
+#   「名刺印刷100枚」と「名刺印刷 100枚」を同じものとして扱う。
+#   このタスクで測りたいのは抜き出せているかどうかで、表記を揃えられるか
+#   ではないので立てている。表記まで含めて合わせたい業務では外す（既定は外れている）。
 grading:
+  collapse_whitespace: true
   scalar_fields: [invoice_number, issue_date, due_date, customer, subtotal, tax, total]
   item_fields: [name, quantity, unit_price, amount]
 

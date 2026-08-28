@@ -62,7 +62,12 @@ schema:
           status: {type: string}
 
 # 採点。ここに挙げた項目がすべて正解と一致したら、そのサンプルは正解。
+#
+# collapse_whitespace: 文字列を比べる前に空白をすべて落とす。
+#   このタスクで測りたいのは抜き出せているかどうかで、表記を揃えられるか
+#   ではないので立てている。表記まで含めて合わせたい業務では外す（既定は外れている）。
 grading:
+  collapse_whitespace: true
   scalar_fields: []
   item_fields: [code, amount, date, status]
 

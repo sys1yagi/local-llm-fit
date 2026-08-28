@@ -6,11 +6,32 @@
 
 from __future__ import annotations
 
+import math
+
+# 95%区間に使う標準正規分布の値
+Z_95 = 1.959963984540054
+
 VERDICT_OK = "基準を満たす"
 VERDICT_SLOW = "応答が遅い"
 VERDICT_LOW_ACCURACY = "正答率が足りない"
 VERDICT_BOTH = "正答率・応答とも足りない"
 VERDICT_ERROR = "エラーが出た"
+
+
+def wilson_interval(successes: int, n: int, z: float = Z_95) -> tuple[float, float]:
+    """正答率の95%区間（Wilsonスコア区間）。
+
+    件数が少ないと正答率は粗くなる。48件なら1件が約2ポイント、12件なら8ポイント。
+    「基準を割った」と読める行が、実は件数不足で判断できないだけなのかを
+    見分けるために添える。閉じた式なので追加の依存も乱数も要らない。
+    """
+    if n <= 0:
+        return (0.0, 1.0)
+    p = successes / n
+    denom = 1 + z * z / n
+    center = (p + z * z / (2 * n)) / denom
+    half = (z / denom) * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
+    return (max(0.0, center - half), min(1.0, center + half))
 
 
 def percentile(values: list[float], q: float) -> float | None:
@@ -51,7 +72,16 @@ def summarize_level(level: dict, graded: list[dict], slo: dict) -> dict:
         "error_rate": round(error_rate, 3),
         "errors": len(errors),
     }
+    lo, hi = wilson_interval(passed, n)
+    row["pass_rate_lo"] = round(lo, 3)
+    row["pass_rate_hi"] = round(hi, 3)
     row["verdict"] = _verdict(row, slo)
+    # 点推定では基準を割っているが、区間の上端は基準を超えている行。
+    # 「足りない」と断定するには件数が足りない。
+    row["accuracy_inconclusive"] = (
+        row["verdict"] in (VERDICT_LOW_ACCURACY, VERDICT_BOTH)
+        and hi >= slo.get("pass_rate", 1.0)
+    )
     return row
 
 
@@ -82,22 +112,27 @@ def _verdict(row: dict, slo: dict) -> str:
 
 
 def to_markdown(rows: list[dict]) -> str:
-    head = ("| 同時に投げた本数 | 最初の文字が出るまで | 返り終わるまで | 1秒あたりの生成量 | 正答率 | 判定 |\n"
+    head = ("| 同時に投げた本数 | 最初の文字が出るまで | 返り終わるまで | 1秒あたりの生成量 | 正答率（95%区間） | 判定 |\n"
             "|---:|---:|---:|---:|---:|:--|")
     lines = [head]
     for r in rows:
+        mark = " ※" if r.get("accuracy_inconclusive") else ""
         lines.append(
             f"| {r['concurrency']} "
             f"| {_s(r['ttft_p95_s'])} | {_s(r['e2e_p95_s'])} "
             f"| {r['throughput_tok_s']:.0f} トークン "
-            f"| {r['passed']}/{r['requests']} ({r['pass_rate'] * 100:.0f}%) "
-            f"| {r['verdict']} |"
+            f"| {r['passed']}/{r['requests']} {r['pass_rate'] * 100:.0f}% "
+            f"({r['pass_rate_lo'] * 100:.0f}〜{r['pass_rate_hi'] * 100:.0f}%) "
+            f"| {r['verdict']}{mark} |"
         )
     lines.append("")
     if rows:
         n = rows[0]["requests"]
         rank = n - max(1, round(0.95 * n)) + 1
         lines.append(f"時間はいずれも p95（{n}件のうち遅い方から{rank}件目の値）。")
+    if any(r.get("accuracy_inconclusive") for r in rows):
+        lines.append("※ 正答率の95%区間の上端が基準を超えている行。"
+                     "基準を割ったと断定するには件数が足りない。")
     return "\n".join(lines)
 
 

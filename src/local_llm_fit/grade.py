@@ -62,15 +62,36 @@ def _norm_int(v: Any) -> int | None:
     return None
 
 
-def _cmp(field: str, got: Any, want: Any) -> bool:
+WHITESPACE = re.compile(r"[\s　]+")
+
+
+def _str_normalizer(grading: dict):
+    """文字列比較の前にかける処理を、タスクの設定から組み立てる。
+
+    collapse_whitespace を立てると、比べる前に両辺の空白を全部落とす。
+    「名刺印刷100枚」と「名刺印刷 100枚」を同じものとして扱いたい、
+    つまり測りたいのが抽出であって表記合わせではない場合に使う。
+    既定は落とさない（表記まで含めて合わせたい業務があるため）。
+    """
+    collapse = bool(grading.get("collapse_whitespace", False))
+
+    def norm(v: Any) -> str:
+        s = _norm_str(v)
+        return WHITESPACE.sub("", s) if collapse else s
+
+    return norm
+
+
+def _cmp(got: Any, want: Any, norm) -> bool:
     if isinstance(want, int):
         return _norm_int(got) == want
-    return _norm_str(got) == _norm_str(want)
+    return norm(got) == norm(want)
 
 
 def grade(content: str, truth: dict, schema: dict, grading: dict) -> dict:
     """1件を採点する。"""
     result: dict[str, Any] = {"ok": False, "reason": None, "mismatches": []}
+    norm = _str_normalizer(grading)
 
     parsed, err = extract_json(content)
     if parsed is None:
@@ -85,7 +106,7 @@ def grade(content: str, truth: dict, schema: dict, grading: dict) -> dict:
         return result
 
     for field in grading["scalar_fields"]:
-        if not _cmp(field, parsed.get(field), truth[field]):
+        if not _cmp(parsed.get(field), truth[field], norm):
             result["mismatches"].append(
                 f"{field}: got={parsed.get(field)!r} want={truth[field]!r}"
             )
@@ -99,7 +120,7 @@ def grade(content: str, truth: dict, schema: dict, grading: dict) -> dict:
     else:
         for n, (g, w) in enumerate(zip(got_items, want_items)):
             for field in grading["item_fields"]:
-                if not _cmp(field, g.get(field), w[field]):
+                if not _cmp(g.get(field), w[field], norm):
                     result["mismatches"].append(
                         f"items[{n}].{field}: got={g.get(field)!r} want={w[field]!r}"
                     )
