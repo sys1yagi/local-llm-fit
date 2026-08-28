@@ -76,7 +76,11 @@ def main() -> None:
     generator = importlib.import_module(
         f"local_llm_fit.generators.{gen_cfg['module']}"
     )
-    samples = generator.generate(samples_n, seed)
+    # module / samples / seed 以外のキーは、そのまま生成器の引数として渡す。
+    # 長さのような、タスクごとに変えたい値を YAML で持てるようにするため。
+    gen_extra = {k: v for k, v in gen_cfg.items()
+                 if k not in ("module", "samples", "seed")}
+    samples = generator.generate(samples_n, seed, **gen_extra)
 
     if args.dry_run:
         print(f"タスク: {task['name']}  サンプル {samples_n} 件 / seed {seed}\n")
