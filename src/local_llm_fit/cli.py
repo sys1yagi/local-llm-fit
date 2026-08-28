@@ -55,7 +55,7 @@ def _machine() -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser(
         prog="fit",
-        description="手元の機材とモデルで、業務タスクが何並列まで載るかを測る",
+        description="同じ仕事を何本も同時に投げて、答えの正しさと待ち時間を一緒に測る",
     )
     ap.add_argument("--task", default="invoice-json-ja", help="タスク名または YAML のパス")
     ap.add_argument("--model", required=False, help="モデル ID（未指定なら接続先の一覧から選べない旨を表示）")
@@ -115,11 +115,11 @@ def main() -> None:
         raw_by_level[level_result["concurrency"]] = list(
             zip(level_result["calls"], graded)
         )
-        print(f"  同時実行 {row['concurrency']:>3}: "
-              f"TTFT p95 {report_mod._s(row['ttft_p95_s'])} / "
-              f"完了 p95 {report_mod._s(row['e2e_p95_s'])} / "
-              f"{row['throughput_tok_s']:.1f} tok/s / "
-              f"合格 {row['passed']}/{row['requests']} / "
+        print(f"  {row['concurrency']:>3}本同時: "
+              f"最初の文字まで {report_mod._s(row['ttft_p95_s'])} / "
+              f"返り終わるまで {report_mod._s(row['e2e_p95_s'])} / "
+              f"毎秒{row['throughput_tok_s']:.0f}トークン / "
+              f"正答 {row['passed']}/{row['requests']} / "
               f"{row['verdict']}")
 
     run_mod.sweep(
@@ -134,11 +134,11 @@ def main() -> None:
     )
 
     print("\n" + report_mod.to_markdown(rows) + "\n")
-    fit = report_mod.max_fit_concurrency(rows)
+    fit = report_mod.max_ok_concurrency(rows)
     if fit is None:
-        print("合否の線を満たした同時実行数はありません。")
+        print("基準をすべて満たした同時実行数はありませんでした。")
     else:
-        print(f"合否の線を満たした最大の同時実行数: {fit}")
+        print(f"基準をすべて満たした最大の同時実行数: {fit}本")
 
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     label = args.label or _machine().get("cpu", platform.machine()).replace(" ", "-")
@@ -155,7 +155,7 @@ def main() -> None:
         "machine": _machine(),
         "slo": slo,
         "levels": rows,
-        "max_fit_concurrency": fit,
+        "max_ok_concurrency": fit,
     }
     out = ROOT / "results" / f"{slug}.json"
     out.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n",

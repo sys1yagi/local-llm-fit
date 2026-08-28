@@ -7,9 +7,13 @@ description: |
 
 # 入力の作り方。実データは使わず、seed 固定で合成する。
 # 同じ seed なら誰の手元でも同じ入力が出る。
+#
+# samples を少なくすると正答率が粗くなる。12件だと 11/12 = 91.7% の次が
+# 12/12 = 100% で、その間の値が存在しない。下の 95% のような基準を使うなら
+# 40件以上は要る。
 generator:
   module: invoice_ja
-  samples: 12
+  samples: 48
   seed: 42
 
 request:
@@ -65,10 +69,10 @@ grading:
   scalar_fields: [invoice_number, issue_date, due_date, customer, subtotal, tax, total]
   item_fields: [name, quantity, unit_price, amount]
 
-# 合否の線。ここを書き換えるのが各社の仕事。
-# 下の数字は「社内の経理担当が数人で使う」想定の仮置き。
+# 「使える」と言える基準。ここを書き換えるのが各社の仕事で、
+# 下の数字は「社内の経理担当が数人で使う」想定の仮置きにすぎない。
 slo:
-  pass_rate: 0.95      # 合格したサンプルの割合
-  ttft_p95_s: 2.0      # 最初の1文字が返るまで（p95）
-  e2e_p95_s: 15.0      # 1件が返り終わるまで（p95）
+  pass_rate: 0.95      # 正しく抽出できた件数の割合
+  ttft_p95_s: 2.0      # 最初の文字が出るまで（p95）
+  e2e_p95_s: 15.0      # 返り終わるまで（p95）
   error_rate: 0.0      # 接続エラー・タイムアウトの割合

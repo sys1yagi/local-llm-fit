@@ -1,15 +1,16 @@
-"""判定マトリクスを作る。
+"""同時実行数ごとの結果表を作る。
 
-同時実行数ごとに「応答時間」と「品質の合格率」を並べ、
-タスク定義に書いた合否の線に照らして 載る / 応答遅延 / 載らない を出す。
+各行は「その同時実行数で測ったときの応答時間と正答率」で、
+判定の列にはタスク定義に書いた基準のうち、どれを割ったかを書く。
 """
 
 from __future__ import annotations
 
-VERDICT_FIT = "載る"
-VERDICT_SLOW = "応答遅延"
-VERDICT_LOW_QUALITY = "品質不足"
-VERDICT_UNFIT = "載らない"
+VERDICT_OK = "基準を満たす"
+VERDICT_SLOW = "応答が遅い"
+VERDICT_LOW_ACCURACY = "正答率が足りない"
+VERDICT_BOTH = "正答率・応答とも足りない"
+VERDICT_ERROR = "エラーが出た"
 
 
 def percentile(values: list[float], q: float) -> float | None:
@@ -59,48 +60,52 @@ def _r(v):
 
 
 def _verdict(row: dict, slo: dict) -> str:
-    """どの線を割ったのかが分かる形で返す。
+    """どの基準を割ったのかを、そのまま言葉にして返す。
 
-    品質と応答時間は別の理由で落ちる。まとめて「載らない」にすると、
+    正答率と応答時間は落ちる理由が違う。ひとまとめの判定にすると、
     モデルを替えるべきなのか機材を足すべきなのかが読めなくなる。
     """
-    low_quality = row["pass_rate"] < slo.get("pass_rate", 1.0)
+    low_accuracy = row["pass_rate"] < slo.get("pass_rate", 1.0)
     over_ttft = row["ttft_p95_s"] is not None and row["ttft_p95_s"] > slo.get("ttft_p95_s", 1e9)
     over_e2e = row["e2e_p95_s"] is not None and row["e2e_p95_s"] > slo.get("e2e_p95_s", 1e9)
     slow = over_ttft or over_e2e
 
     if row["error_rate"] > slo.get("error_rate", 0.0):
-        return VERDICT_UNFIT
-    if low_quality and slow:
-        return VERDICT_UNFIT
-    if low_quality:
-        return VERDICT_LOW_QUALITY
+        return VERDICT_ERROR
+    if low_accuracy and slow:
+        return VERDICT_BOTH
+    if low_accuracy:
+        return VERDICT_LOW_ACCURACY
     if slow:
         return VERDICT_SLOW
-    return VERDICT_FIT
+    return VERDICT_OK
 
 
 def to_markdown(rows: list[dict]) -> str:
-    head = ("| 同時実行 | TTFT p50 | TTFT p95 | 応答完了 p95 | スループット | 合格率 | エラー | 判定 |\n"
-            "|---:|---:|---:|---:|---:|---:|---:|:--|")
+    head = ("| 同時に投げた本数 | 最初の文字が出るまで | 返り終わるまで | 1秒あたりの生成量 | 正答率 | 判定 |\n"
+            "|---:|---:|---:|---:|---:|:--|")
     lines = [head]
     for r in rows:
         lines.append(
             f"| {r['concurrency']} "
-            f"| {_s(r['ttft_p50_s'])} | {_s(r['ttft_p95_s'])} | {_s(r['e2e_p95_s'])} "
-            f"| {r['throughput_tok_s']:.1f} tok/s "
-            f"| {r['pass_rate'] * 100:.0f}% ({r['passed']}/{r['requests']}) "
-            f"| {r['errors']} "
+            f"| {_s(r['ttft_p95_s'])} | {_s(r['e2e_p95_s'])} "
+            f"| {r['throughput_tok_s']:.0f} トークン "
+            f"| {r['passed']}/{r['requests']} ({r['pass_rate'] * 100:.0f}%) "
             f"| {r['verdict']} |"
         )
+    lines.append("")
+    if rows:
+        n = rows[0]["requests"]
+        rank = n - max(1, round(0.95 * n)) + 1
+        lines.append(f"時間はいずれも p95（{n}件のうち遅い方から{rank}件目の値）。")
     return "\n".join(lines)
 
 
 def _s(v) -> str:
-    return "-" if v is None else f"{v:.2f}s"
+    return "-" if v is None else f"{v:.2f}秒"
 
 
-def max_fit_concurrency(rows: list[dict]) -> int | None:
-    """判定が「載る」で通った最大の同時実行数。"""
-    fits = [r["concurrency"] for r in rows if r["verdict"] == VERDICT_FIT]
-    return max(fits) if fits else None
+def max_ok_concurrency(rows: list[dict]) -> int | None:
+    """基準をすべて満たした最大の同時実行数。"""
+    ok = [r["concurrency"] for r in rows if r["verdict"] == VERDICT_OK]
+    return max(ok) if ok else None
