@@ -125,8 +125,19 @@ def _cmd_pages(argv: list[str]) -> None:
                                      back_href="index.html")
         (out / f"{summary['run_id']}.html").write_text(page, encoding="utf-8")
 
+    # 見出しに使う読みやすい名前を tasks/*.yaml から拾う。無ければタスク名のまま。
+    titles: dict[str, str] = {}
+    for tf in sorted((ROOT / "tasks").glob("*.yaml")):
+        try:
+            t = yaml.safe_load(tf.read_text(encoding="utf-8"))
+        except yaml.YAMLError:
+            continue
+        if t and t.get("name"):
+            titles[t["name"]] = t.get("title") or t["name"]
+
     (out / "index.html").write_text(
-        htmlout.render_index(summaries, method_href="METHOD.md"), encoding="utf-8")
+        htmlout.render_index(summaries, method_href="METHOD.md",
+                             task_titles=titles), encoding="utf-8")
     # 測定条件は一覧からリンクするので、素のMarkdownを一緒に置く
     method = ROOT / "METHOD.md"
     if method.exists():

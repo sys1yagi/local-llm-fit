@@ -48,6 +48,10 @@ tbody tr:hover { background: #fafbfc; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 92%;
        background: #f3f5f7; padding: 1px 4px; border-radius: 3px; }
 .mark { color: #c2352b; }
+.headline { font-size: 21px; font-weight: 700; margin: 14px 0 2px; color: #16406e; }
+.sub { font-size: 12px; color: #6b7681; margin: 0 0 12px; }
+.reading { font-size: 15px; margin: 0 0 6px; padding: 12px 14px;
+           background: #f2f6fa; border-left: 4px solid #2f6db4; }
 """
 
 
@@ -256,7 +260,93 @@ def render_report(summary: dict, calls: list[dict] | None = None,
     return _doc(f"{summary['task']['name']} の測定結果", "".join(body))
 
 
-def render_index(summaries: list[dict], method_href: str = "METHOD.md") -> str:
+def _first_break(levels: list[dict], key: str, limit: float | None,
+                 over: bool = True) -> int | None:
+    """基準を最初に割った同時本数。割らなければ None。"""
+    if limit is None:
+        return None
+    for r in levels:
+        v = r.get(key)
+        if v is None:
+            continue
+        if (v > limit) if over else (v < limit):
+            return r["concurrency"]
+    return None
+
+
+def _reading(summary: dict) -> str:
+    """表から機械的に導ける読み解きを1〜2文で組み立てる。
+
+    どの基準を何本目で割るかは levels から一意に決まる。
+    ここでは書かれている値を並べ替えるだけで、判断は足さない。
+    """
+    levels = summary["levels"]
+    slo = summary["slo"]
+
+    ttft = _first_break(levels, "ttft_p95_s", slo.get("ttft_p95_s"))
+    e2e = _first_break(levels, "e2e_p95_s", slo.get("e2e_p95_s"))
+    err = _first_break(levels, "error_rate", slo.get("error_rate", 0.0))
+
+    parts = []
+    if ttft is None and e2e is None:
+        parts.append("応答時間はどの本数でも基準内です。")
+    elif ttft is not None and e2e is not None and ttft == e2e:
+        parts.append(f"応答時間は{ttft}本で基準を割ります"
+                     "（最初の文字まで・返り終わるまでとも）。")
+    else:
+        first = min(x for x in (ttft, e2e) if x is not None)
+        which = "最初の文字までの時間" if first == ttft else "返り終わるまでの時間"
+        parts.append(f"{which}が{first}本で基準を割ります。")
+
+    bad = [r for r in levels if r["pass_rate"] < slo.get("pass_rate", 1.0)]
+    if not bad:
+        parts.append("正答率はどの本数でも基準を満たします。")
+    else:
+        where = "・".join(f"{r['concurrency']}本" for r in bad)
+        unsure = [r for r in bad if r.get("accuracy_inconclusive")]
+        if len(bad) == 1:
+            head = f"正答率は{where}の1行だけが基準を割ります"
+        else:
+            head = f"正答率は{where}で基準を割ります"
+        if len(unsure) == len(bad):
+            parts.append(head + "が、95%区間の上端が基準を超えているため、"
+                                "件数不足で断定できません。")
+        elif unsure:
+            n = "・".join(f"{r['concurrency']}本" for r in unsure)
+            parts.append(head + f"（うち{n}は件数不足で断定できません）。")
+        else:
+            parts.append(head + "。")
+
+    if err is not None:
+        parts.append(f"{err}本でエラーが出ています。")
+    return "".join(parts)
+
+
+def _highlight(summary: dict, title: str) -> str:
+    """入口に出す1タスクぶんの節。詳細ページと同じグラフを埋め込む。"""
+    machine = summary.get("machine") or {}
+    fit = summary.get("max_ok_concurrency")
+    headline = f"基準をすべて満たした最大の同時実行数: {fit}本" if fit else \
+               "基準をすべて満たした同時実行数: なし"
+    sub = " ／ ".join(filter(None, [
+        machine.get("cpu") or machine.get("arch"),
+        summary.get("model"),
+        summary.get("server_label"),
+        (summary.get("measured_at") or "")[:10],
+    ]))
+    return (
+        f"<h2>{escape(title)}</h2>"
+        f'<div class="headline">{escape(headline)}</div>'
+        f'<p class="sub">{escape(sub)}</p>'
+        f'<p class="reading">{escape(_reading(summary))}</p>'
+        + _charts(summary) +
+        f'<p class="note"><a href="{escape(summary["run_id"])}.html">'
+        "この測定の詳細（表・使った基準・前提）→</a></p>"
+    )
+
+
+def render_index(summaries: list[dict], method_href: str = "METHOD.md",
+                 task_titles: dict[str, str] | None = None) -> str:
     """持ち寄った結果の一覧ページ。"""
     rows = []
     for s in sorted(summaries, key=lambda x: x.get("measured_at", ""), reverse=True):
@@ -279,10 +369,28 @@ def render_index(summaries: list[dict], method_href: str = "METHOD.md") -> str:
         "<th>測定日</th><th>基準を満たす最大本数</th>"
         "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
     )
+    # タスクごとに、いちばん新しい測定を1件だけ入口に出す。
+    latest: dict[str, dict] = {}
+    for s in summaries:
+        name = s["task"]["name"]
+        if name not in latest or (s.get("measured_at") or "") > (
+                latest[name].get("measured_at") or ""):
+            latest[name] = s
+
+    titles = task_titles or {}
+    sections = [
+        _highlight(s, titles.get(name, name))
+        for name, s in sorted(latest.items())
+    ]
+
     body = [
-        "<h1>local-llm-fit 測定結果</h1>",
-        ('<p class="lede">持ち寄られた測定を並べています。'
-         "機材名をクリックすると、その測定の詳細が開きます。</p>"),
+        "<h1>ローカルLLMは、その業務を何人ぶんさばけるか</h1>",
+        ('<p class="lede">同じ業務タスクを何本も同時に投げて、'
+         "「答えが合っているか」と「どれだけ待たされるか」を一緒に測った結果です。"
+         "仕事ごとに、いちばん新しい測定を1件ずつ出しています。"
+         '測り方は <a href="https://github.com/sys1yagi/local-llm-fit">local-llm-fit</a>。</p>'),
+        *sections,
+        "<h2>すべての測定</h2>",
         ('<div class="warn"><strong>そのまま比べられる数字ではありません。</strong>'
          "モデル・量子化・推論サーバの設定・入力の長さ・基準の置き方が違えば、"
          "最大本数も変わります。とくに<strong>基準はタスク定義に書かれた"
@@ -293,4 +401,4 @@ def render_index(summaries: list[dict], method_href: str = "METHOD.md") -> str:
         ('<p class="note">結果を足すには、手元で <code>uv run fit</code> を回して '
          "<code>results/</code> に出たJSONをプルリクエストで送ってください。</p>"),
     ]
-    return _doc("local-llm-fit 測定結果", "".join(body))
+    return _doc("ローカルLLMは、その業務を何人ぶんさばけるか", "".join(body))
