@@ -102,7 +102,7 @@ def _cmd_report(argv: list[str]) -> None:
 def _cmd_pages(argv: list[str]) -> None:
     ap = argparse.ArgumentParser(
         prog="fit pages",
-        description="results/ の全件から、持ち寄り用の一覧と詳細ページを作る",
+        description="results/ と tasks/ から、シナリオ・モデル・機材で引けるサイトを作る",
     )
     ap.add_argument("outdir", nargs="?", default="site", help="出力先（既定 site）")
     args = ap.parse_args(argv)
@@ -110,41 +110,13 @@ def _cmd_pages(argv: list[str]) -> None:
     out = Path(args.outdir)
     if not out.is_absolute():
         out = ROOT / out
-    out.mkdir(parents=True, exist_ok=True)
 
-    files = sorted(RESULTS.glob("*.json"))
-    if not files:
-        sys.exit("results/ にJSONがありません。")
-
-    summaries = []
-    for f in files:
-        summary = json.loads(f.read_text(encoding="utf-8"))
-        summaries.append(summary)
-        # 持ち寄りページには runs/ の生データを載せない
-        page = htmlout.render_report(summary, None, method_href="METHOD.md",
-                                     back_href="index.html")
-        (out / f"{summary['run_id']}.html").write_text(page, encoding="utf-8")
-
-    # 見出しに使う読みやすい名前を tasks/*.yaml から拾う。無ければタスク名のまま。
-    titles: dict[str, str] = {}
-    for tf in sorted((ROOT / "tasks").glob("*.yaml")):
-        try:
-            t = yaml.safe_load(tf.read_text(encoding="utf-8"))
-        except yaml.YAMLError:
-            continue
-        if t and t.get("name"):
-            titles[t["name"]] = t.get("title") or t["name"]
-
-    (out / "index.html").write_text(
-        htmlout.render_index(summaries, method_href="METHOD.md",
-                             task_titles=titles), encoding="utf-8")
-    # 測定条件は一覧からリンクするので、素のMarkdownを一緒に置く
-    method = ROOT / "METHOD.md"
-    if method.exists():
-        (out / "METHOD.md").write_text(method.read_text(encoding="utf-8"),
-                                       encoding="utf-8")
-    print(f"{out.relative_to(ROOT) if out.is_relative_to(ROOT) else out} に "
-          f"{len(summaries)}件ぶん書き出しました（index.html）")
+    from . import site
+    got = site.build(ROOT, out)
+    where = out.relative_to(ROOT) if out.is_relative_to(ROOT) else out
+    print(f"{where} に {len(got['pages'])}ページ書き出しました"
+          f"（シナリオ {got['scenarios']} / 測定 {got['results']} / "
+          f"モデル {got['models']} / 機材 {got['machines']}）")
 
 
 def _cmd_measure(argv: list[str]) -> None:
