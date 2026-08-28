@@ -12,8 +12,8 @@ generator:
 
 request:
   temperature: 0
-  # 返すのは種別1つだけ
-  max_tokens: 120
+  # 上限は答えを切らないための安全弁。思考を先に吐くモデルは思考分もここから使う
+  max_tokens: 4096
 
 prompt: |
   次の契約書がどの種別かを判定し、JSONで返してください。JSONだけを出力してください。

@@ -14,8 +14,8 @@ generator:
 
 request:
   temperature: 0
-  # 返すのは3項目だけ
-  max_tokens: 300
+  # 上限は答えを切らないための安全弁。思考を先に吐くモデルは思考分もここから使う
+  max_tokens: 4096
 
 prompt: |
   次の社内規程集を読み、冒頭の質問に答えてJSONで返してください。

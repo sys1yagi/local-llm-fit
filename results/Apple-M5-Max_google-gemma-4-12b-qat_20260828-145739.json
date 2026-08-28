@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "run_id": "Apple-M5-Max_google-gemma-4-12b-qat_20260828-145739",
+  "measured_at": "2026-08-28T14:57:39.407083+00:00",
+  "task": {
+    "name": "contract-renewal-due-ja",
+    "file": "contract-renewal-due-ja.yaml",
+    "samples_per_level": 12,
+    "seed": 406,
+    "same_truth_different_wording_per_level": true
+  },
+  "model": "google/gemma-4-12b-qat",
+  "endpoint": "http://localhost:1234/v1",
+  "server_label": "LM Studio",
+  "machine": {
+    "os": "Darwin 25.5.0",
+    "arch": "arm64",
+    "python": "3.12.13",
+    "cpu": "Apple M5 Max",
+    "memory_gb": 128
+  },
+  "slo": {
+    "pass_rate": 0.9,
+    "ttft_p95_s": 3.0,
+    "e2e_p95_s": 20.0,
+    "error_rate": 0.0
+  },
+  "levels": [
+    {
+      "concurrency": 1,
+      "requests": 12,
+      "wall_s": 1693.68,
+      "ttft_p50_s": null,
+      "ttft_p95_s": null,
+      "e2e_p50_s": 140.624,
+      "e2e_p95_s": 148.183,
+      "output_tokens": 49152,
+      "throughput_tok_s": 29.021,
+      "pass_rate": 0.0,
+      "passed": 0,
+      "error_rate": 0.0,
+      "errors": 0,
+      "pass_rate_lo": 0.0,
+      "pass_rate_hi": 0.242,
+      "verdict": "正答率・応答とも足りない",
+      "accuracy_inconclusive": false
+    }
+  ],
+  "max_ok_concurrency": null
+}

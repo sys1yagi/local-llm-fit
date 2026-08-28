@@ -14,8 +14,8 @@ generator:
 
 request:
   temperature: 0
-  # 宿題は多くて3件
-  max_tokens: 400
+  # 上限は答えを切らないための安全弁。思考を先に吐くモデルは思考分もここから使う
+  max_tokens: 4096
 
 prompt: |
   次の打ち合わせメモから、宿題を引き受けた人と期限を抜き出し、JSONで返してください。

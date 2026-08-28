@@ -15,8 +15,8 @@ generator:
 
 request:
   temperature: 0
-  # 返すのは6項目だけ
-  max_tokens: 400
+  # 上限は答えを切らないための安全弁。思考を先に吐くモデルは思考分もここから使う
+  max_tokens: 4096
 
 prompt: |
   次の業務委託契約書から、下の項目を抜き出してJSONで返してください。

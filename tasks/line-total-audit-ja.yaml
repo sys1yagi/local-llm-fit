@@ -13,8 +13,8 @@ generator:
 
 request:
   temperature: 0
-  # 誤りは多くて2箇所なので、配列は短い
-  max_tokens: 500
+  # 上限は答えを切らないための安全弁。思考を先に吐くモデルは思考分もここから使う
+  max_tokens: 4096
 
 prompt: |
   次の明細表を検算し、計算が合っていない行だけをJSONで挙げてください。

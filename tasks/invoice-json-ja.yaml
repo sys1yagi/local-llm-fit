@@ -18,7 +18,8 @@ generator:
 
 request:
   temperature: 0
-  max_tokens: 700
+  # 上限は答えを切らないための安全弁。思考を先に吐くモデルは思考分もここから使う
+  max_tokens: 4096
 
 prompt: |
   次の請求書から情報を抽出し、JSONだけを出力してください。説明文やコードブロックの前後の文章は不要です。

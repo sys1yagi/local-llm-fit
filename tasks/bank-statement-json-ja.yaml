@@ -14,8 +14,8 @@ generator:
 
 request:
   temperature: 0
-  # 15〜22行 × 3項目を返すので、配列が長くなる
-  max_tokens: 2000
+  # 上限は答えを切らないための安全弁。思考を先に吐くモデルは思考分もここから使う
+  max_tokens: 4096
 
 prompt: |
   次の口座取引明細を1行ずつJSONにしてください。JSONだけを出力してください。

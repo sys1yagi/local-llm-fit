@@ -12,8 +12,8 @@ generator:
 
 request:
   temperature: 0
-  # 返すのは4〜6カテゴリぶんの合計
-  max_tokens: 500
+  # 上限は答えを切らないための安全弁。思考を先に吐くモデルは思考分もここから使う
+  max_tokens: 4096
 
 prompt: |
   次の経費明細を勘定科目ごとに合計し、JSONで返してください。

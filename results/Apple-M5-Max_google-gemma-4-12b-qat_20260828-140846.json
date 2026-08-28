@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "run_id": "Apple-M5-Max_google-gemma-4-12b-qat_20260828-140846",
+  "measured_at": "2026-08-28T14:08:46.257275+00:00",
+  "task": {
+    "name": "line-total-audit-ja",
+    "file": "line-total-audit-ja.yaml",
+    "samples_per_level": 12,
+    "seed": 402,
+    "same_truth_different_wording_per_level": true
+  },
+  "model": "google/gemma-4-12b-qat",
+  "endpoint": "http://localhost:1234/v1",
+  "server_label": "LM Studio",
+  "machine": {
+    "os": "Darwin 25.5.0",
+    "arch": "arm64",
+    "python": "3.12.13",
+    "cpu": "Apple M5 Max",
+    "memory_gb": 128
+  },
+  "slo": {
+    "pass_rate": 0.9,
+    "ttft_p95_s": 2.0,
+    "e2e_p95_s": 15.0,
+    "error_rate": 0.0
+  },
+  "levels": [
+    {
+      "concurrency": 1,
+      "requests": 12,
+      "wall_s": 917.54,
+      "ttft_p50_s": 57.049,
+      "ttft_p95_s": 116.955,
+      "e2e_p50_s": 59.867,
+      "e2e_p95_s": 143.938,
+      "output_tokens": 26415,
+      "throughput_tok_s": 28.789,
+      "pass_rate": 0.75,
+      "passed": 9,
+      "error_rate": 0.0,
+      "errors": 0,
+      "pass_rate_lo": 0.468,
+      "pass_rate_hi": 0.911,
+      "verdict": "正答率・応答とも足りない",
+      "accuracy_inconclusive": true
+    }
+  ],
+  "max_ok_concurrency": null
+}
