@@ -49,7 +49,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9
        background: #f3f5f7; padding: 1px 4px; border-radius: 3px; }
 .mark { color: #c2352b; }
 .nav { font-size: 12px; color: #6b7681; margin: 0 0 18px; }
-.nav a { margin-right: 12px; }
+.nav a, .nav span { margin-right: 12px; }
+.sub-id { display: block; font-size: 11px; color: #6b7681; }
 .legend { background: #f7f9fb; border: 1px solid #e4e7ec; border-radius: 4px;
           padding: 10px 16px; margin: 12px 0 16px; font-size: 12.5px; }
 .legend ul { margin: 4px 0; padding-left: 20px; }

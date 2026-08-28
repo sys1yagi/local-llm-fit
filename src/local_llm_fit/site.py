@@ -61,13 +61,40 @@ def _nav(current: str, extra: list[tuple[str, str]] | None = None) -> str:
     return f'<p class="nav">{got}</p>'
 
 
-def _legend(docs: Docs) -> str:
-    """表の列が何を指すかの説明。README と METHOD からそのまま引く。"""
-    body = mdlite.render(docs.table_legend, LINK_MAP)
+def _p95_rank(samples: int) -> int:
+    return samples - max(1, round(0.95 * samples)) + 1
+
+
+def _retarget(text: str, samples: int | None) -> str:
+    """引用の中の件数を、そのページのサンプル数に合わせる。
+
+    合わせられないページ（複数のシナリオが混ざる一覧）では、
+    件数の具体例を落として引用する。意味は変えない。
+    """
+    if samples:
+        return (text.replace("48件のうち遅い方から3件目", f"{samples}件のうち遅い方から{_p95_rank(samples)}件目")
+                    .replace("48件なら遅い方から3件目", f"{samples}件なら遅い方から{_p95_rank(samples)}件目")
+                    .replace("48件のうち、", f"{samples}件のうち、")
+                    .replace("同じ48件の正解", f"同じ{samples}件の正解"))
+    return (text.replace("48件のうち遅い方から3件目の値（p95）", "p95の値")
+                .replace("（48件なら遅い方から3件目）", "")
+                .replace("48件のうち、", "")
+                .replace("同じ48件の正解", "同じ正解"))
+
+
+def _legend(docs: Docs, samples: int | None = None) -> str:
+    """表の列が何を指すかの説明。README と METHOD からそのまま引く。
+
+    引用するのは用語の定義だけで、特定のタスクの基準値に触れた段は載せない。
+    """
+    only_terms = "\n".join(
+        ln for ln in docs.table_legend.split("\n")
+        if ln.startswith(("-", " ", "\t")) or not ln.strip())
+    body = mdlite.render(_retarget(only_terms, samples), LINK_MAP)
     p95 = ""
     for para in docs.measured_values.split("\n\n"):
         if "p95" in para and "補間" in para:
-            p95 = mdlite.render(para, LINK_MAP)
+            p95 = mdlite.render(_retarget(para, samples), LINK_MAP)
             break
     return ('<div class="legend"><p class="note">README「表の読み方」・'
             f"METHOD.md「測っている値」より</p>{body}{p95}</div>")
@@ -113,7 +140,8 @@ def _index(docs: Docs, scen: list[dict], counts: dict[str, int]) -> str:
             "<tr>"
             f"<td>{escape(s['family_code'])}. {escape(s['family_name'])}</td>"
             f'<td><a href="s-{escape(s["id"], quote=True)}.html">'
-            f"<code>{escape(s['id'])}</code></a></td>"
+            f"{escape(s['work'])}</a>"
+            f'<span class="sub-id"><code>{escape(s["id"])}</code></span></td>'
             f"<td>{escape(s['state'])}</td>"
             f"<td>{n}</td>"
             "</tr>")
@@ -146,7 +174,8 @@ def _scenario_page(docs: Docs, s: dict, task: dict | None,
 
     body = [
         _nav(""),
-        f"<h1><code>{escape(s['id'])}</code></h1>",
+        (f"<h1>{escape(s['work'])}<br>"
+         f'<span class="sub-id"><code>{escape(s["id"])}</code></span></h1>'),
         ('<p class="note">出典: '
          '<a href="catalog.html">業務シナリオのカタログ</a></p>'),
         f'<dl class="meta">{meta}</dl>',
@@ -154,12 +183,13 @@ def _scenario_page(docs: Docs, s: dict, task: dict | None,
 
     if task:
         slo = task["slo"]
+        samples = task["generator"]["samples"]
         body += [
             "<h2>タスク定義</h2>",
             f"<p>{escape(task['title'])}</p>",
             mdlite.render(task.get("description", ""), LINK_MAP),
             "<h2>使う基準</h2>",
-            _legend(docs),
+            _legend(docs, samples),
             ("<ul>"
              f"<li>正答率 {slo.get('pass_rate', 0) * 100:.0f}% 以上</li>"
              f"<li>最初の文字まで {slo.get('ttft_p95_s')} 秒以内（p95）</li>"
