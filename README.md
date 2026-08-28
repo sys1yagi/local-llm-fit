@@ -9,13 +9,6 @@
 外部のAPIに向けることもできますが、その場合に見えるのは自分の機材の限界ではなく
 提供元の混み具合なので、読み方が変わります。
 
-> Measures how much real work an LLM can take **on your own setup**: it sends the same
-> business task at increasing concurrency and records both answer correctness and
-> latency, then reports the largest concurrency that still meets your bar.
-> Works against any OpenAI-compatible endpoint — a laptop, an on-prem GPU box, or a
-> server. Tasks are Japanese business documents; inputs are synthesised from a fixed
-> seed, so no real data is needed and nothing leaves your environment.
-
 ## 何が分かるか
 
 速さと正しさは、片方だけでは判断材料になりません。
@@ -157,3 +150,17 @@ Ollama なら `--base-url http://localhost:11434/v1`、別のマシンなら
 ## ライセンス
 
 MIT
+
+## English
+
+Docs are in Japanese, because the tasks are Japanese business documents.
+
+It sends the same task at increasing concurrency against any OpenAI-compatible
+endpoint, records both answer correctness and latency, and reports the largest
+concurrency that still meets the bar you set in `tasks/*.yaml`.
+Inputs are synthesised from a fixed seed, so no real data is needed.
+
+```bash
+uv sync
+uv run fit --model <model-id> --base-url http://localhost:1234/v1 --concurrency 1,2,4,8
+```
