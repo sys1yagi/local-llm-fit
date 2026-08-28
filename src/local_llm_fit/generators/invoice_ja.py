@@ -1,8 +1,19 @@
 """日本語の請求書を合成する。
 
-実データは使わない。seed を固定すれば、誰の手元でも同じ入力が出る。
+実データは使わない。seed を固定すれば、誰の手元でも同じものが出る。
 出力は (人が読む請求書テキスト, 正解の構造化データ) の組。
 正解は先に作り、そこから文面を組み立てるので、正解が必ず本文と一致する。
+
+同時本数の行ごとに generate_row(..., row=N) を呼ぶ。
+  - 正解は (seed, サンプル番号) だけから作る → 全行で同一
+  - 文面は (seed, サンプル番号, 行番号) から作る → 行ごとに別の文面
+
+こうしているのは、行ごとに正解まで変えてしまうと、行間の正答率の差に
+入力の個体差が混ざって読めなくなるため。かつ、全行で同じ文面を投げると
+推論サーバが読み込みを省略して、後の行ほど速く見えてしまうため。
+
+レンダラーは (サンプル番号 + 行番号) で回すので、1行の中の構成比は
+どの行でも各3分の1に揃う。行によって難しい文面が偏ることがない。
 """
 
 from __future__ import annotations
@@ -13,6 +24,10 @@ PREFIX = ["株式会社", "合同会社", ""]
 SUFFIX = ["株式会社", "商事", "工業", ""]
 NAME_A = ["あおぞら", "みどり", "新和", "青葉", "つばさ", "山下", "北斗", "大和", "ひかり", "中央"]
 NAME_B = ["商会", "製作所", "システムズ", "物流", "デザイン", "テクノ", "サービス", "電機"]
+
+# 正解には入らない表層。行ごとに引き直す。
+TITLES = ["請 求 書", "請求書", "ご請求書", "請求明細書"]
+HONORIFICS = ["御中", "様"]
 
 ITEMS = [
     ("A4コピー用紙（500枚）", 480),
@@ -56,7 +71,9 @@ def _date(rng: random.Random) -> tuple[str, str]:
     return issue, due
 
 
-def _record(rng: random.Random, index: int) -> dict:
+def _truth(seed: int, index: int) -> dict:
+    """正解。(seed, サンプル番号) だけで決まるので、行番号によらず同じ。"""
+    rng = random.Random(f"{seed}/invoice/truth/{index}")
     n_items = rng.randint(1, 4)
     picked = rng.sample(ITEMS, n_items)
     items = []
@@ -83,19 +100,47 @@ def _record(rng: random.Random, index: int) -> dict:
     }
 
 
+def _surface(seed: int, index: int, row: int) -> dict:
+    """正解に含まれない表層。行ごとに引き直す。
+
+    表題は (サンプル番号 + 行番号) で回す。文面の1行目が行ごとに変わるので、
+    プロンプトの先頭一致が早い位置で崩れる（＝読み込みが省略されない）。
+    """
+    rng = random.Random(f"{seed}/invoice/surface/{index}/{row}")
+    order = [0, 1, 2]
+    rng.shuffle(order)
+    return {
+        "title": TITLES[(index + row) % len(TITLES)],
+        "issuer": _company(rng),
+        "honorific": rng.choice(HONORIFICS),
+        "header_order": order,
+    }
+
+
 def _yen(n: int) -> str:
     return f"{n:,}"
 
 
-def _render_table(r: dict, issuer: str) -> str:
+def _header_pairs(r: dict) -> list[tuple[str, str]]:
+    return [("請求書番号", r["invoice_number"]),
+            ("発行日", r["issue_date"]),
+            ("お支払期限", r["due_date"])]
+
+
+def _ordered_header(r: dict, s: dict) -> list[tuple[str, str]]:
+    pairs = _header_pairs(r)
+    return [pairs[i] for i in s["header_order"]]
+
+
+def _render_table(r: dict, s: dict) -> str:
     lines = [
-        "請 求 書",
+        s["title"],
         "",
-        f"{r['customer']} 御中",
+        f"{r['customer']} {s['honorific']}",
         "",
-        f"請求書番号: {r['invoice_number']}",
-        f"発行日: {r['issue_date']}",
-        f"お支払期限: {r['due_date']}",
+    ]
+    lines += [f"{label}: {value}" for label, value in _ordered_header(r, s)]
+    lines += [
         "",
         "品名                              数量      単価        金額",
         "-" * 62,
@@ -108,18 +153,19 @@ def _render_table(r: dict, issuer: str) -> str:
         f"{'消費税(10%)':>42}{_yen(r['tax']):>12}",
         f"{'合計':>44}{_yen(r['total']):>12}",
         "",
-        f"発行元: {issuer}",
+        f"発行元: {s['issuer']}",
     ]
     return "\n".join(lines)
 
 
-def _render_lines(r: dict, issuer: str) -> str:
+def _render_lines(r: dict, s: dict) -> str:
+    head = " / ".join(f"{label} {value}" for label, value in _ordered_header(r, s))
     lines = [
-        f"{issuer}",
-        f"請求書 No.{r['invoice_number']}",
-        f"{r['issue_date']} 発行 / お支払期限 {r['due_date']}",
+        s["title"],
+        s["issuer"],
+        head,
         "",
-        f"宛先: {r['customer']} 様",
+        f"宛先: {r['customer']} {s['honorific']}",
         "",
         "【ご請求明細】",
     ]
@@ -136,17 +182,14 @@ def _render_lines(r: dict, issuer: str) -> str:
     return "\n".join(lines)
 
 
-def _render_labeled(r: dict, issuer: str) -> str:
+def _render_labeled(r: dict, s: dict) -> str:
     body = [
-        "=== 請求書 ===",
-        f"[発行元] {issuer}",
-        f"[請求先] {r['customer']}御中",
-        f"[番号] {r['invoice_number']}",
-        f"[発行日] {r['issue_date']}",
-        f"[期限] {r['due_date']}",
-        "",
-        "[明細]",
+        f"=== {s['title']} ===",
+        f"[発行元] {s['issuer']}",
+        f"[請求先] {r['customer']}{s['honorific']}",
     ]
+    body += [f"[{label}] {value}" for label, value in _ordered_header(r, s)]
+    body += ["", "[明細]"]
     for i in r["items"]:
         body.append(
             f"  品名={i['name']} / 数量={i['quantity']} / 単価={_yen(i['unit_price'])} / 金額={_yen(i['amount'])}"
@@ -163,16 +206,15 @@ def _render_labeled(r: dict, issuer: str) -> str:
 RENDERERS = [_render_table, _render_lines, _render_labeled]
 
 
-def generate(samples: int, seed: int) -> list[dict]:
-    rng = random.Random(seed)
+def generate_row(samples: int, seed: int, row: int = 0) -> list[dict]:
     out = []
     for i in range(samples):
-        record = _record(rng, i)
-        issuer = _company(rng)
-        render = RENDERERS[i % len(RENDERERS)]
+        truth = _truth(seed, i)
+        surface = _surface(seed, i, row)
+        render = RENDERERS[(i + row) % len(RENDERERS)]
         out.append({
             "id": f"{i:03d}",
-            "input": render(record, issuer),
-            "truth": record,
+            "input": render(truth, surface),
+            "truth": truth,
         })
     return out

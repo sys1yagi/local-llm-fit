@@ -83,7 +83,7 @@ def main() -> None:
                  if k not in ("module", "samples", "seed")}
 
     if args.dry_run:
-        samples = generator.generate(samples_n, seed, **gen_extra)
+        samples = generator.generate_row(samples_n, seed, 0, **gen_extra)
         print(f"タスク: {task['name']}  サンプル {samples_n} 件 / seed {seed}\n")
         print(samples[0]["input"])
         print("\n--- 正解 ---")
@@ -94,19 +94,20 @@ def main() -> None:
         sys.exit("--model を指定してください。接続先のモデル ID は "
                  f"curl {args.base_url}/models で確認できます。")
 
-    # 同時本数の行ごとに、初見の入力を使う。同じ入力を投げ直すと推論サーバが
-    # 前回読んだ内容を覚えていて、後の行ほど速く見えてしまうため。
-    # 1つの seed から (件数 × 行数) 件をまとめて作り、先頭から順に割り当てる。
-    all_samples = generator.generate(samples_n * len(levels), seed, **gen_extra)
-    samples_by_level = [all_samples[i * samples_n:(i + 1) * samples_n]
-                        for i in range(len(levels))]
-    truth_by_id = {s["id"]: s["truth"] for s in all_samples}
+    # 同時本数の行ごとに、同じ正解を別の文面で描き直したものを投げる。
+    # 正解を行間で固定するのは、行ごとの正答率を並べて比べられるようにするため。
+    # 文面を行ごとに変えるのは、同じ文面を投げ直すと推論サーバが前回読んだ
+    # 内容を覚えていて、後の行ほど速く見えてしまうため。
+    samples_by_level = [generator.generate_row(samples_n, seed, r, **gen_extra)
+                        for r in range(len(levels))]
+    # 正解は行によらず同じなので、1行目から引ければ足りる。
+    truth_by_id = {s["id"]: s["truth"] for s in samples_by_level[0]}
     slo = task["slo"]
 
     print(f"タスク : {task['name']} ({samples_n} 件 × {len(levels)}行 / seed {seed})")
     print(f"モデル : {args.model}")
     print(f"接続先 : {args.base_url}")
-    print(f"同時実行: {levels}（行ごとに別の入力を使う）\n")
+    print(f"同時実行: {levels}（行ごとに同じ正解・別の文面）\n")
 
     raw_by_level: dict[int, list] = {}
     rows: list[dict] = []
@@ -161,7 +162,7 @@ def main() -> None:
         "measured_at": datetime.now(UTC).isoformat(),
         "task": {"name": task["name"], "file": task_path.name,
                  "samples_per_level": samples_n, "seed": seed,
-                 "distinct_inputs_per_level": True},
+                 "same_truth_different_wording_per_level": True},
         "model": args.model,
         "endpoint": args.base_url,
         "machine": _machine(),

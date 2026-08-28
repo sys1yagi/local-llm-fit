@@ -1,16 +1,23 @@
 """長い業務日報のまとめを合成する。
 
-実データは使わない。seed を固定すれば、誰の手元でも同じ文書が出る。
+実データは使わない。seed を固定すれば、誰の手元でも同じものが出る。
 出力は (人が読む日報のまとまり, 正解の構造化データ) の組。
 
 狙いは、答えが文書の離れた場所に散らばっている状態を作ること。
-先に「決定の内容」を決め、それを本文のどこに置くかを乱数で散らすので、
-前の方にあるか後ろの方にあるかで取りこぼしが変わるなら、それが正答率に出る。
+
+同時本数の行ごとに generate_row(..., row=N) を呼ぶ。
+  - 決定の内容と、それを置く位置（文書を5等分したどのあたりか）は
+    (seed, サンプル番号) だけから決まる → 全行で同一
+  - 埋め草の日報と紛らわしい行だけ (seed, サンプル番号, 行番号) から作る
+    → 行ごとに別の文面
+
+正解と答えの位置を行間で固定してあるので、行ごとの正答率を並べて比べられる。
+文面が行ごとに違うので、推論サーバが読み込みを省略することもない。
 
 紛らわしさは2つの形で入れている。
   1. 同じ案件番号の「当初見積」の行を、決定の行から離れた場所に置く。
      金額も日付も違うので、決定の行を読まずに拾うと外れる
-  2. 似た書き方で金額と日付を持つ、無関係な案件の行を大量に混ぜる
+  2. 似た書き方で金額と日付を持つ、無関係な案件の行をちょうど25本混ぜる
 """
 
 from __future__ import annotations
@@ -63,9 +70,8 @@ FILLER_SENTENCES = [
     "安全講習の受講状況を取りまとめ、未受講者へ案内した。",
 ]
 
-
-def _person(rng: random.Random) -> str:
-    return rng.choice(FAMILY)
+BUCKETS = 5          # 文書を5等分し、決定の行をどのあたりに置くかを固定する
+DECOYS_PER_DOC = 25  # 無関係な案件の紛らわしい行の本数
 
 
 def _date_str(rng: random.Random, month_range: tuple[int, int]) -> tuple[str, str]:
@@ -79,12 +85,13 @@ def _yen(n: int) -> str:
     return f"{n:,}"
 
 
-def _needles(rng: random.Random, count: int) -> list[dict]:
-    """先に「決定の内容」を作る。本文はこれを見て書く。"""
+def _needles(seed: int, index: int, count: int) -> list[dict]:
+    """決定の内容と置く位置。(seed, サンプル番号) だけで決まるので行によらず同じ。"""
+    rng = random.Random(f"{seed}/report/truth/{index}")
     codes = rng.sample(range(1000, 9999), count)
     topics = rng.sample(PROJECT_TOPICS, count)
     out = []
-    for code, topic in zip(codes, topics):
+    for n, (code, topic) in enumerate(zip(codes, topics)):
         amount = rng.randrange(180_000, 4_800_000, 10_000)
         iso, written = _date_str(rng, (5, 9))
         out.append({
@@ -97,6 +104,8 @@ def _needles(rng: random.Random, count: int) -> list[dict]:
             # 当初見積。決定額とは必ず違う値にする
             "draft_amount": amount + rng.randrange(30_000, 900_000, 10_000),
             "draft_written": _date_str(rng, (2, 4))[1],
+            # 文書のどのあたりに置くか。件数がバケツ数以下なら重複しない
+            "bucket": rng.randrange(BUCKETS) if count > BUCKETS else n % BUCKETS,
         })
     return out
 
@@ -105,12 +114,8 @@ def _entry(rng: random.Random, day_index: int, body: list[str]) -> str:
     month = 4 + day_index // 22
     day = day_index % 22 + 1
     head = (f"── 2026年{month}月{day}日 業務日報 "
-            f"／ {rng.choice(DEPTS)} ／ 記入者: {_person(rng)} ──")
+            f"／ {rng.choice(DEPTS)} ／ 記入者: {rng.choice(FAMILY)} ──")
     return head + "\n" + "\n".join(body) + "\n"
-
-
-def _filler_body(rng: random.Random) -> list[str]:
-    return [rng.choice(FILLER_SENTENCES) for _ in range(rng.randint(4, 7))]
 
 
 def _decoy_line(rng: random.Random) -> str:
@@ -137,23 +142,30 @@ def _draft_line(n: dict) -> str:
 
 
 def _build_document(rng: random.Random, needles: list[dict], doc_chars: int) -> str:
-    """埋め草の日報を必要な長さまで並べ、その中に決定の行と見積の行を散らす。"""
+    """埋め草の日報を必要な長さまで並べ、決定の行を決められたバケツの中に置く。"""
     entries: list[list[str]] = []
     total = 0
-    day = 0
     while total < doc_chars:
-        body = _filler_body(rng)
-        if rng.random() < 0.35:
-            body.insert(rng.randrange(len(body) + 1), _decoy_line(rng))
+        body = [rng.choice(FILLER_SENTENCES) for _ in range(rng.randint(4, 7))]
         entries.append(body)
         total += sum(len(s) for s in body) + 60
-        day += 1
-
-    # 決定の行は文書全体に散らす。前方・中央・後方が seed でばらけるようにする。
-    # 並べ替えないので、案件番号を並べた順と本文に出てくる順は一致しない。
     n_entries = len(entries)
-    slots = rng.sample(range(n_entries), min(len(needles), n_entries))
-    for needle, slot in zip(needles, slots):
+
+    # 紛らわしい行はちょうど DECOYS_PER_DOC 本。行によって本数が変わらないようにする。
+    for slot in rng.sample(range(n_entries), min(DECOYS_PER_DOC, n_entries)):
+        body = entries[slot]
+        body.insert(rng.randrange(len(body) + 1), _decoy_line(rng))
+
+    # 決定の行は、正解側で決めたバケツの中のどこかに置く。
+    # どのバケツかは行によらず同じで、バケツ内の細かい位置だけ行ごとに動く。
+    used: set[int] = set()
+    for needle in needles:
+        lo = needle["bucket"] * n_entries // BUCKETS
+        hi = max(lo + 1, (needle["bucket"] + 1) * n_entries // BUCKETS)
+        choices = [i for i in range(lo, hi) if i not in used] or list(range(lo, hi))
+        slot = rng.choice(choices)
+        used.add(slot)
+
         body = entries[slot]
         body.insert(rng.randrange(len(body) + 1), _decision_line(needle))
 
@@ -166,12 +178,12 @@ def _build_document(rng: random.Random, needles: list[dict], doc_chars: int) -> 
     return "\n".join(_entry(rng, i, b) for i, b in enumerate(entries))
 
 
-def generate(samples: int, seed: int, doc_chars: int = 20000,
-             needles: int = 6) -> list[dict]:
-    rng = random.Random(seed)
+def generate_row(samples: int, seed: int, row: int = 0, doc_chars: int = 20000,
+                 needles: int = 6) -> list[dict]:
     out = []
     for i in range(samples):
-        picked = _needles(rng, needles)
+        picked = _needles(seed, i, needles)
+        rng = random.Random(f"{seed}/report/surface/{i}/{row}")
         document = _build_document(rng, picked, doc_chars)
 
         # 抜き出す対象は本文中の案件番号で指定する。
@@ -180,18 +192,18 @@ def generate(samples: int, seed: int, doc_chars: int = 20000,
         body = (f"【対象の案件番号】\n{codes}\n\n"
                 f"【業務日報】\n{document}")
 
-        truth = {
-            "items": [
-                {"code": n["code"], "amount": n["amount"],
-                 "date": n["date"], "status": n["status"]}
-                for n in picked
-            ]
-        }
         out.append({
             "id": f"{i:03d}",
             "input": body,
-            "truth": truth,
+            "truth": {
+                "items": [
+                    {"code": n["code"], "amount": n["amount"],
+                     "date": n["date"], "status": n["status"]}
+                    for n in picked
+                ]
+            },
             # 採点には使わない。あとで「答えの位置と正答率」を見るための記録。
-            "meta": {"doc_chars": len(document), "needles": len(picked)},
+            "meta": {"doc_chars": len(document),
+                     "buckets": [n["bucket"] for n in picked]},
         })
     return out

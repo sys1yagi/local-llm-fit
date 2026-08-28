@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "run_id": "Apple-M5-Max_ornith-1.5-35b-a3b_20260828-054631",
-  "measured_at": "2026-08-28T05:46:31.023730+00:00",
+  "run_id": "Apple-M5-Max_ornith-1.5-35b-a3b_20260828-064924",
+  "measured_at": "2026-08-28T06:49:24.869019+00:00",
   "task": {
     "name": "long-report-ja",
     "file": "long-report-ja.yaml",
     "samples_per_level": 12,
-    "seed": 77,
-    "distinct_inputs_per_level": true
+    "seed": 79,
+    "same_truth_different_wording_per_level": true
   },
   "model": "ornith-1.5-35b-a3b",
   "endpoint": "http://localhost:1234/v1",
@@ -28,29 +28,29 @@
     {
       "concurrency": 1,
       "requests": 12,
-      "wall_s": 194.67,
-      "ttft_p50_s": 12.704,
-      "ttft_p95_s": 13.133,
-      "e2e_p50_s": 16.308,
-      "e2e_p95_s": 16.967,
-      "output_tokens": 4407,
-      "throughput_tok_s": 22.638,
-      "pass_rate": 1.0,
-      "passed": 12,
+      "wall_s": 229.62,
+      "ttft_p50_s": 14.362,
+      "ttft_p95_s": 16.74,
+      "e2e_p50_s": 18.216,
+      "e2e_p95_s": 22.223,
+      "output_tokens": 4549,
+      "throughput_tok_s": 19.811,
+      "pass_rate": 0.75,
+      "passed": 9,
       "error_rate": 0.0,
       "errors": 0,
-      "verdict": "基準を満たす"
+      "verdict": "正答率が足りない"
     },
     {
       "concurrency": 4,
       "requests": 12,
-      "wall_s": 262.2,
-      "ttft_p50_s": 23.975,
-      "ttft_p95_s": 53.464,
-      "e2e_p50_s": 88.332,
-      "e2e_p95_s": 120.114,
-      "output_tokens": 4401,
-      "throughput_tok_s": 16.785,
+      "wall_s": 336.82,
+      "ttft_p50_s": 28.058,
+      "ttft_p95_s": 72.122,
+      "e2e_p50_s": 112.958,
+      "e2e_p95_s": 148.079,
+      "output_tokens": 4544,
+      "throughput_tok_s": 13.491,
       "pass_rate": 0.917,
       "passed": 11,
       "error_rate": 0.0,
@@ -58,5 +58,5 @@
       "verdict": "応答が遅い"
     }
   ],
-  "max_ok_concurrency": 1
+  "max_ok_concurrency": null
 }
