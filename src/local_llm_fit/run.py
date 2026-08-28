@@ -4,6 +4,11 @@
 到着間隔を決めた open-loop の負荷が要るようになったら、この層だけ
 GuideLLM のような専用ツールに差し替えられるよう、採点とは分けてある。
 
+同時実行数ごとに別の入力を投げる（samples_by_level）。
+同じ入力を投げ直すと、推論サーバが前回読んだ内容を覚えていて読み込みを
+省略するため、後の行ほど速く見える。入力2万字のタスクでは、同じ4本同時が
+初見59.7秒・2回目0.40秒に分かれた。
+
 「最初の文字が出るまで」は、答えの本文の1文字目が届いた時刻で測る。
 推論モデルが思考トークンを先に吐く場合、本文が出るまでの時間がここに乗る。
 それは測定の誤りではなく、利用者が実際に待つ時間なので、そのまま測る。
@@ -101,11 +106,12 @@ async def _sweep_level(base_url: str, model: str, samples: list[dict],
     return {"concurrency": concurrency, "wall_s": wall, "calls": calls}
 
 
-def sweep(base_url: str, model: str, samples: list[dict], prompt_template: str,
-          levels: list[int], request_opts: dict, timeout_s: float,
-          on_level=None) -> list[dict]:
+def sweep(base_url: str, model: str, samples_by_level: list[list[dict]],
+          prompt_template: str, levels: list[int], request_opts: dict,
+          timeout_s: float, on_level=None) -> list[dict]:
+    """levels と samples_by_level は同じ長さで、順に対応する。"""
     results = []
-    for level in levels:
+    for level, samples in zip(levels, samples_by_level):
         r = asyncio.run(_sweep_level(base_url, model, samples, prompt_template,
                                      level, request_opts, timeout_s))
         results.append(r)

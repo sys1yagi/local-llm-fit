@@ -72,6 +72,7 @@ def main() -> None:
     gen_cfg = task["generator"]
     samples_n = args.samples or gen_cfg["samples"]
     seed = args.seed if args.seed is not None else gen_cfg["seed"]
+    levels = [int(x) for x in args.concurrency.split(",") if x.strip()]
 
     generator = importlib.import_module(
         f"local_llm_fit.generators.{gen_cfg['module']}"
@@ -80,9 +81,9 @@ def main() -> None:
     # 長さのような、タスクごとに変えたい値を YAML で持てるようにするため。
     gen_extra = {k: v for k, v in gen_cfg.items()
                  if k not in ("module", "samples", "seed")}
-    samples = generator.generate(samples_n, seed, **gen_extra)
 
     if args.dry_run:
+        samples = generator.generate(samples_n, seed, **gen_extra)
         print(f"タスク: {task['name']}  サンプル {samples_n} 件 / seed {seed}\n")
         print(samples[0]["input"])
         print("\n--- 正解 ---")
@@ -93,13 +94,19 @@ def main() -> None:
         sys.exit("--model を指定してください。接続先のモデル ID は "
                  f"curl {args.base_url}/models で確認できます。")
 
-    levels = [int(x) for x in args.concurrency.split(",") if x.strip()]
+    # 同時本数の行ごとに、初見の入力を使う。同じ入力を投げ直すと推論サーバが
+    # 前回読んだ内容を覚えていて、後の行ほど速く見えてしまうため。
+    # 1つの seed から (件数 × 行数) 件をまとめて作り、先頭から順に割り当てる。
+    all_samples = generator.generate(samples_n * len(levels), seed, **gen_extra)
+    samples_by_level = [all_samples[i * samples_n:(i + 1) * samples_n]
+                        for i in range(len(levels))]
+    truth_by_id = {s["id"]: s["truth"] for s in all_samples}
     slo = task["slo"]
 
-    print(f"タスク : {task['name']} ({samples_n} 件 / seed {seed})")
+    print(f"タスク : {task['name']} ({samples_n} 件 × {len(levels)}行 / seed {seed})")
     print(f"モデル : {args.model}")
     print(f"接続先 : {args.base_url}")
-    print(f"同時実行: {levels}\n")
+    print(f"同時実行: {levels}（行ごとに別の入力を使う）\n")
 
     raw_by_level: dict[int, list] = {}
     rows: list[dict] = []
@@ -107,7 +114,7 @@ def main() -> None:
     def on_level(level_result: dict) -> None:
         graded = []
         for call in level_result["calls"]:
-            truth = next(s["truth"] for s in samples if s["id"] == call.sample_id)
+            truth = truth_by_id[call.sample_id]
             if call.error:
                 graded.append({"ok": False, "reason": "request_error",
                                "mismatches": [call.error]})
@@ -129,7 +136,7 @@ def main() -> None:
     run_mod.sweep(
         base_url=args.base_url.rstrip("/"),
         model=args.model,
-        samples=samples,
+        samples_by_level=samples_by_level,
         prompt_template=task["prompt"],
         levels=levels,
         request_opts=task.get("request", {}),
@@ -153,7 +160,8 @@ def main() -> None:
         "run_id": slug,
         "measured_at": datetime.now(UTC).isoformat(),
         "task": {"name": task["name"], "file": task_path.name,
-                 "samples": samples_n, "seed": seed},
+                 "samples_per_level": samples_n, "seed": seed,
+                 "distinct_inputs_per_level": True},
         "model": args.model,
         "endpoint": args.base_url,
         "machine": _machine(),
