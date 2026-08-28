@@ -1,0 +1,114 @@
+"""同時実行数を振って測る。
+
+負荷のかけ方は closed-loop（同時に C 本を保ち、終わったら次を投げる）。
+到着間隔を決めた open-loop の負荷が要るようになったら、この層だけ
+GuideLLM のような専用ツールに差し替えられるよう、採点とは分けてある。
+
+TTFT は「本文の最初の1文字が届いた時刻」で測る。
+推論モデルが思考トークンを先に吐く場合、本文が出るまでの時間がここに乗る。
+それは測定の誤りではなく、利用者が実際に待つ時間なので、そのまま測る。
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import time
+from dataclasses import dataclass, field
+
+import httpx
+
+
+@dataclass
+class Call:
+    sample_id: str
+    ttft_s: float | None = None
+    e2e_s: float | None = None
+    output_tokens: int = 0
+    content: str = ""
+    error: str | None = None
+    chunks: int = 0
+    usage: dict = field(default_factory=dict)
+
+
+async def _one(client: httpx.AsyncClient, base_url: str, model: str,
+               prompt: str, sample_id: str, request_opts: dict,
+               timeout_s: float) -> Call:
+    call = Call(sample_id=sample_id)
+    body = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "stream": True,
+        "stream_options": {"include_usage": True},
+        **request_opts,
+    }
+    started = time.perf_counter()
+    try:
+        async with client.stream(
+            "POST", f"{base_url}/chat/completions", json=body,
+            timeout=httpx.Timeout(timeout_s, connect=10.0),
+        ) as resp:
+            if resp.status_code != 200:
+                text = (await resp.aread()).decode(errors="replace")
+                call.error = f"http_{resp.status_code}: {text[:200]}"
+                call.e2e_s = time.perf_counter() - started
+                return call
+            async for line in resp.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                payload = line[5:].strip()
+                if payload == "[DONE]":
+                    break
+                try:
+                    event = json.loads(payload)
+                except json.JSONDecodeError:
+                    continue
+                if event.get("usage"):
+                    call.usage = event["usage"]
+                for choice in event.get("choices") or []:
+                    piece = (choice.get("delta") or {}).get("content") or ""
+                    if piece:
+                        if call.ttft_s is None:
+                            call.ttft_s = time.perf_counter() - started
+                        call.content += piece
+                        call.chunks += 1
+    except (httpx.TimeoutException, httpx.HTTPError) as e:
+        call.error = f"{type(e).__name__}: {e}"[:200]
+
+    call.e2e_s = time.perf_counter() - started
+    call.output_tokens = int(call.usage.get("completion_tokens") or call.chunks)
+    return call
+
+
+async def _sweep_level(base_url: str, model: str, samples: list[dict],
+                       prompt_template: str, concurrency: int,
+                       request_opts: dict, timeout_s: float) -> dict:
+    sem = asyncio.Semaphore(concurrency)
+    limits = httpx.Limits(max_connections=concurrency + 4,
+                          max_keepalive_connections=concurrency + 4)
+
+    async with httpx.AsyncClient(limits=limits) as client:
+        async def guarded(sample: dict) -> Call:
+            async with sem:
+                prompt = prompt_template.replace("{input}", sample["input"])
+                return await _one(client, base_url, model, prompt,
+                                  sample["id"], request_opts, timeout_s)
+
+        wall_start = time.perf_counter()
+        calls = await asyncio.gather(*(guarded(s) for s in samples))
+        wall = time.perf_counter() - wall_start
+
+    return {"concurrency": concurrency, "wall_s": wall, "calls": calls}
+
+
+def sweep(base_url: str, model: str, samples: list[dict], prompt_template: str,
+          levels: list[int], request_opts: dict, timeout_s: float,
+          on_level=None) -> list[dict]:
+    results = []
+    for level in levels:
+        r = asyncio.run(_sweep_level(base_url, model, samples, prompt_template,
+                                     level, request_opts, timeout_s))
+        results.append(r)
+        if on_level:
+            on_level(r)
+    return results

@@ -1,0 +1,21 @@
+[project]
+name = "local-llm-fit"
+version = "0.1.0"
+description = "Measure whether a local LLM can carry a business workload: output quality and latency together, under concurrency."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "jsonschema>=4.21",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+fit = "local_llm_fit.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/local_llm_fit"]
