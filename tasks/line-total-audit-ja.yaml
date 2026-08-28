@@ -1,0 +1,62 @@
+name: line-total-audit-ja
+title: 明細表を検算して、金額が合っていない行を挙げる
+description: |
+  経理・監査の突合作業。明細表を渡し、計算の合っていない行だけを
+  挙げさせる。誤りは0〜2箇所で、無い場合もある。
+  難所は端数処理で、消費税は1円未満を切り捨てる決まりにしてある。
+  切り上げや四捨五入で計算すると、正しい行を誤りとして挙げてしまう。
+
+generator:
+  module: line_total_audit_ja
+  samples: 48
+  seed: 42
+
+request:
+  temperature: 0
+  # 誤りは多くて2箇所なので、配列は短い
+  max_tokens: 500
+
+prompt: |
+  次の明細表を検算し、計算が合っていない行だけをJSONで挙げてください。
+  JSONだけを出力してください。
+
+  検算のしかた（表に書かれている数字だけを使ってください）:
+  - 明細の各行: 数量 × 単価 が、その行の金額と一致するか
+  - 小計: 明細の金額をすべて足したものと一致するか
+  - 消費税: 小計の10%（1円未満は切り捨て）と一致するか
+  - 合計: 小計 + 消費税 と一致するか
+
+  キーは次のとおりにしてください。
+  - items: 合っていない行の配列。表に出てくる順に並べてください。誤りが無ければ空配列
+    - row: 明細行なら行番号を文字列で（"1" など）、それ以外は "小計" "消費税" "合計"
+    - correct: そこに入るべき正しい値（整数。カンマや「円」を含めない）
+
+  {input}
+
+schema:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        type: object
+        required: [row, correct]
+        properties:
+          row: {type: string}
+          correct: {type: integer}
+
+# 採点。挙げた行と正しい値が、順番も含めて一致したら合格。
+# 誤りを見落としても、正しい行を誤りとして挙げても不合格になる。
+grading:
+  collapse_whitespace: true
+  scalar_fields: []
+  item_fields: [row, correct]
+
+# 「使える」と言える基準。仮置き。
+# 入力は400字ほどで出力も短いので、既存の短い抽出タスクに合わせている。
+slo:
+  pass_rate: 0.90      # 正しく検算できた件数の割合
+  ttft_p95_s: 2.0      # 最初の文字が出るまで（p95）
+  e2e_p95_s: 15.0      # 返り終わるまで（p95）
+  error_rate: 0.0      # 接続エラー・タイムアウトの割合

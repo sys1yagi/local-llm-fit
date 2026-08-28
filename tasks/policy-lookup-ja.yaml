@@ -1,0 +1,58 @@
+name: policy-lookup-ja
+title: 社内規程集から、該当する規程と数値を引く
+description: |
+  総務・労務の照会対応。6本ぶんの社内規程を渡し、質問に該当する規程名・
+  条番号・日数を返させる。
+  難所は似た規程の混同。育児休業と介護休業のように、条の並びも言い回しも
+  ほとんど同じ規程が隣に置いてあるので、数値だけを拾うと別の規程の
+  同じ位置にある数値を返してしまう。
+
+generator:
+  module: policy_lookup_ja
+  samples: 48
+  seed: 42
+
+request:
+  temperature: 0
+  # 返すのは3項目だけ
+  max_tokens: 300
+
+prompt: |
+  次の社内規程集を読み、冒頭の質問に答えてJSONで返してください。
+  JSONだけを出力してください。
+
+  注意:
+  - よく似た名前の規程が並んでいます。質問に書かれている規程名と
+    完全に同じ規程を見てください
+  - 条番号は「第◯条」の形で返してください
+
+  キーは次のとおりにしてください。
+  - policy_name: 根拠になる規程の名前
+  - article: 根拠になる条の番号（「第4条」のような文字列）
+  - days: 申請が必要な日数（整数）
+
+  {input}
+
+schema:
+  type: object
+  required: [policy_name, article, days]
+  properties:
+    policy_name: {type: string}
+    article: {type: string}
+    days: {type: integer}
+
+# 採点。規程名・条番号・日数の3つが一致したら合格。
+grading:
+  collapse_whitespace: true
+  scalar_fields: [policy_name, article, days]
+  item_fields: []
+
+# 「使える」と言える基準。仮置き。
+# 入力が1万字を超えるので、読み込みが待ち時間の大半を占める。
+# Apple M5 Max + ornith-1.5-35b-a3b で同じ長さの既存タスク（long-report-ja）を
+# 同時1本で測ると最初の文字まで16秒だったので、その2倍弱を線にしている。
+slo:
+  pass_rate: 0.90      # 3項目すべて当てられた件数の割合
+  ttft_p95_s: 30.0     # 最初の文字が出るまで（p95）
+  e2e_p95_s: 45.0      # 返り終わるまで（p95）
+  error_rate: 0.0      # 接続エラー・タイムアウトの割合

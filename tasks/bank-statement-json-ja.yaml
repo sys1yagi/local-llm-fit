@@ -1,0 +1,66 @@
+name: bank-statement-json-ja
+title: 銀行の取引明細を1行ずつJSONにする
+description: |
+  経理の入金消込。15〜22行の取引明細を渡し、全行を構造化させる。
+  難所は2つ。振込人の名前が摘要欄の中に「振込」「手数料込」などと
+  一緒に入っているので、名前だけを取り出す必要がある。
+  入金と出金は別の列に書かれるので、出金を負の数にして1つの項目に
+  まとめ直す必要がある。
+
+generator:
+  module: bank_statement_ja
+  samples: 48
+  seed: 42
+
+request:
+  temperature: 0
+  # 15〜22行 × 3項目を返すので、配列が長くなる
+  max_tokens: 2000
+
+prompt: |
+  次の口座取引明細を1行ずつJSONにしてください。JSONだけを出力してください。
+
+  注意:
+  - 出金は金額を負の数にしてください。入金は正の数のままです
+  - 相手先は、摘要欄から名前の部分だけを取り出してください。
+    「振込」「フリコミ」「自動引落」「手数料込」「当月分」などは名前ではありません
+  - 日付が月日だけで書かれている場合は、見出しの年を補ってください
+  - 明細に出てくる順にすべての行を返してください
+
+  キーは次のとおりにしてください。
+  - items: 取引の配列
+    - date: 取引日（YYYY-MM-DD の文字列）
+    - amount: 金額（整数。出金は負の数。カンマや「円」を含めない）
+    - counterparty: 相手先の名前
+
+  {input}
+
+schema:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      minItems: 1
+      items:
+        type: object
+        required: [date, amount, counterparty]
+        properties:
+          date: {type: string}
+          amount: {type: integer}
+          counterparty: {type: string}
+
+# 採点。全行の3項目が、並び順も含めて一致したら合格。
+grading:
+  collapse_whitespace: true
+  scalar_fields: []
+  item_fields: [date, amount, counterparty]
+
+# 「使える」と言える基準。仮置き。
+# 入力は千字前後だが、全行を書き出すので出力がこの10件でいちばん長い。
+# 返り終わるまでの線は、書く量を見込んで長めに置いた。
+slo:
+  pass_rate: 0.90      # 全行を正しく起こせた件数の割合
+  ttft_p95_s: 3.0      # 最初の文字が出るまで（p95）
+  e2e_p95_s: 45.0      # 返り終わるまで（p95）
+  error_rate: 0.0      # 接続エラー・タイムアウトの割合

@@ -1,0 +1,62 @@
+name: memo-actions-ja
+title: 打ち合わせメモから、誰がいつまでに何をやるかを取り出す
+description: |
+  会議のあとの宿題出し。短いメモを渡し、宿題を引き受けた人と期限を
+  JSONで返させる。
+  難所は2つ。引き受ける発言が「では私が」のような一人称なので、
+  誰の宿題かは行頭の話者名からしか分からない。期限は「今週金曜」の
+  ような相対表現なので、冒頭の日付から絶対の日付に直す必要がある。
+
+generator:
+  module: memo_actions_ja
+  samples: 48
+  seed: 42
+
+request:
+  temperature: 0
+  # 宿題は多くて3件
+  max_tokens: 400
+
+prompt: |
+  次の打ち合わせメモから、宿題を引き受けた人と期限を抜き出し、JSONで返してください。
+  JSONだけを出力してください。
+
+  注意:
+  - 「私」「こちら」が誰を指すかは、その発言をした人です
+  - 「今週金曜」のような書き方は、メモの冒頭にある日付を基準に
+    実際の日付へ直してください
+  - 埋め草の発言（宿題を引き受けていないもの）は拾わないでください
+
+  キーは次のとおりにしてください。
+  - items: 宿題の配列。メモに出てくる順に並べてください
+    - owner: 引き受けた人の名字
+    - due: 期限（YYYY-MM-DD の文字列）
+
+  {input}
+
+schema:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        type: object
+        required: [owner, due]
+        properties:
+          owner: {type: string}
+          due: {type: string}
+
+# 採点。担当と期限が、順番も含めて一致したら合格。
+grading:
+  collapse_whitespace: true
+  scalar_fields: []
+  item_fields: [owner, due]
+
+# 「使える」と言える基準。仮置き。
+# 入力が200字ほどで出力も短いので、既存の短い抽出タスクに合わせている。
+slo:
+  pass_rate: 0.90      # 正しく拾えた件数の割合
+  ttft_p95_s: 2.0      # 最初の文字が出るまで（p95）
+  e2e_p95_s: 12.0      # 返り終わるまで（p95）
+  error_rate: 0.0      # 接続エラー・タイムアウトの割合

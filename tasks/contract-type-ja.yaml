@@ -1,0 +1,49 @@
+name: contract-type-ja
+title: 契約書の種別を、表題ではなく中身で判定する
+description: |
+  法務の受付。契約書の抜粋を渡し、種別を1語で返させる。
+  難所は、表題と中身が食い違うこと。6割の回で表題が別の種別になっているので、
+  定められている義務の内容を見ないと当たらない。
+
+generator:
+  module: contract_type_ja
+  samples: 48
+  seed: 42
+
+request:
+  temperature: 0
+  # 返すのは種別1つだけ
+  max_tokens: 120
+
+prompt: |
+  次の契約書がどの種別かを判定し、JSONで返してください。JSONだけを出力してください。
+
+  注意:
+  - 表題は当てになりません。定められている義務の内容で判断してください
+  - 種別は次の5つのいずれかで、この表記をそのまま使ってください。
+    売買契約 / 業務委託契約 / 賃貸借契約 / 秘密保持契約 / ライセンス契約
+
+  キーは次のとおりにしてください。
+  - contract_type: 種別
+
+  {input}
+
+schema:
+  type: object
+  required: [contract_type]
+  properties:
+    contract_type: {type: string}
+
+# 採点。種別が一致したら合格。
+grading:
+  collapse_whitespace: true
+  scalar_fields: [contract_type]
+  item_fields: []
+
+# 「使える」と言える基準。仮置き。
+# 入力は千字弱で、出力は1語。読み込みは要るが書く量は少ない。
+slo:
+  pass_rate: 0.90      # 正しく判定できた件数の割合
+  ttft_p95_s: 3.0      # 最初の文字が出るまで（p95）
+  e2e_p95_s: 10.0      # 返り終わるまで（p95）
+  error_rate: 0.0      # 接続エラー・タイムアウトの割合

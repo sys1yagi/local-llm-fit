@@ -1,0 +1,65 @@
+name: contract-terms-json-ja
+title: 業務委託契約書から基本条項を取り出す
+description: |
+  法務の契約台帳づくり。契約書を渡し、当事者・期間・委託料・解約予告を
+  JSONで返させる。
+  難所は末尾の特約で、本則で決めた委託料や解約予告の日数を上書きすることが
+  ある。上書きがある回とない回を混ぜてあるので、本則だけ読んでも特約だけ
+  見ても正解にならない。
+  日付は西暦・和暦・スラッシュ区切りが混ざる。
+
+generator:
+  module: contract_terms_ja
+  samples: 48
+  seed: 42
+
+request:
+  temperature: 0
+  # 返すのは6項目だけ
+  max_tokens: 400
+
+prompt: |
+  次の業務委託契約書から、下の項目を抜き出してJSONで返してください。
+  JSONだけを出力してください。
+
+  注意:
+  - 末尾の特約は本則より優先します。特約で上書きされている項目は、
+    特約の値を答えてください
+  - 日付は和暦やスラッシュ区切りで書かれていることがあります。
+    いずれも YYYY-MM-DD に直してください
+
+  キーは次のとおりにしてください。
+  - party_a: 甲の会社名
+  - party_b: 乙の会社名
+  - start_date: 契約期間の始まり（YYYY-MM-DD）
+  - end_date: 契約期間の終わり（YYYY-MM-DD）
+  - monthly_fee: 最終的に適用される月額の委託料（整数。カンマや「円」を含めない）
+  - termination_notice_days: 最終的に適用される解約予告の日数（整数）
+
+  {input}
+
+schema:
+  type: object
+  required: [party_a, party_b, start_date, end_date, monthly_fee, termination_notice_days]
+  properties:
+    party_a: {type: string}
+    party_b: {type: string}
+    start_date: {type: string}
+    end_date: {type: string}
+    monthly_fee: {type: integer}
+    termination_notice_days: {type: integer}
+
+# 採点。6項目すべてが一致したら合格。
+grading:
+  collapse_whitespace: true
+  scalar_fields: [party_a, party_b, start_date, end_date, monthly_fee, termination_notice_days]
+  item_fields: []
+
+# 「使える」と言える基準。仮置き。
+# 入力が2千字前後あるので、短い抽出タスクより読み込みに時間がかかる。
+# 最初の文字までの線は、それを見込んで請求書の2倍に置いた。
+slo:
+  pass_rate: 0.90      # 6項目すべて当てられた件数の割合
+  ttft_p95_s: 4.0      # 最初の文字が出るまで（p95）
+  e2e_p95_s: 20.0      # 返り終わるまで（p95）
+  error_rate: 0.0      # 接続エラー・タイムアウトの割合

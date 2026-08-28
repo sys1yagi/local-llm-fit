@@ -1,0 +1,60 @@
+name: contract-renewal-due-ja
+title: 契約一覧から、更新の判断期限が90日以内に来るものを挙げる
+description: |
+  総務の契約管理。契約の一覧と基準日を渡し、判断期限が基準日から90日以内に
+  来る契約を挙げさせる。
+  難所は自動更新の扱い。自動更新のある契約は満了日そのものではなく
+  「満了日の◯日前」が期限になるので、満了日だけを見ると取りこぼす。
+
+generator:
+  module: contract_renewal_due_ja
+  samples: 48
+  seed: 42
+
+request:
+  temperature: 0
+  # 該当するのは一覧18〜22件のうち数件
+  max_tokens: 900
+
+prompt: |
+  次の契約一覧から、更新の判断期限が基準日から90日以内（基準日当日と90日後を含む）に
+  来る契約を挙げ、JSONで返してください。JSONだけを出力してください。
+
+  判断期限の決め方:
+  - 自動更新がある契約: 満了日の「通知が必要な日数」だけ前の日が期限
+  - 自動更新がない契約: 満了日そのものが期限
+  - 期限が基準日より前のものは含めません
+
+  キーは次のとおりにしてください。
+  - items: 該当する契約の配列。期限の早い順、同じ日なら一覧に出てくる順に並べてください
+    - party: 契約先の会社名
+    - deadline: 判断期限（YYYY-MM-DD の文字列）
+
+  {input}
+
+schema:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        type: object
+        required: [party, deadline]
+        properties:
+          party: {type: string}
+          deadline: {type: string}
+
+# 採点。挙げた契約と期限が、並び順も含めて一致したら合格。
+grading:
+  collapse_whitespace: true
+  scalar_fields: []
+  item_fields: [party, deadline]
+
+# 「使える」と言える基準。仮置き。
+# 入力は千字前後で、契約書1通より短く請求書より長い。
+slo:
+  pass_rate: 0.90      # 正しく挙げられた件数の割合
+  ttft_p95_s: 3.0      # 最初の文字が出るまで（p95）
+  e2e_p95_s: 20.0      # 返り終わるまで（p95）
+  error_rate: 0.0      # 接続エラー・タイムアウトの割合

@@ -1,0 +1,59 @@
+name: expense-category-total-ja
+title: 経費明細をカテゴリごとに合計する
+description: |
+  経理の月次集計。20〜30行の経費明細を渡し、勘定科目ごとの合計を返させる。
+  科目は各行に書いてあるので判定は要らない。測るのは加算そのもので、
+  1件でも拾い落とすと合計が合わない。
+
+generator:
+  module: expense_category_total_ja
+  samples: 48
+  seed: 42
+
+request:
+  temperature: 0
+  # 返すのは4〜6カテゴリぶんの合計
+  max_tokens: 500
+
+prompt: |
+  次の経費明細を勘定科目ごとに合計し、JSONで返してください。
+  JSONだけを出力してください。
+
+  注意:
+  - 明細に1件も出てこない科目は含めないでください
+  - 並び順は次のとおりにしてください。
+    旅費交通費 → 会議費 → 交際費 → 消耗品費 → 通信費 → 支払手数料 → 新聞図書費 → 広告宣伝費
+
+  キーは次のとおりにしてください。
+  - items: 科目ごとの合計の配列
+    - category: 勘定科目名
+    - total: その科目の合計金額（整数。カンマや「円」を含めない）
+
+  {input}
+
+schema:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        type: object
+        required: [category, total]
+        properties:
+          category: {type: string}
+          total: {type: integer}
+
+# 採点。科目と合計が、並び順も含めて一致したら合格。
+grading:
+  collapse_whitespace: true
+  scalar_fields: []
+  item_fields: [category, total]
+
+# 「使える」と言える基準。仮置き。
+# 入力は千数百字で、契約書と同じくらい。出力は短い。
+slo:
+  pass_rate: 0.90      # すべての科目の合計が合った件数の割合
+  ttft_p95_s: 4.0      # 最初の文字が出るまで（p95）
+  e2e_p95_s: 20.0      # 返り終わるまで（p95）
+  error_rate: 0.0      # 接続エラー・タイムアウトの割合
