@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "run_id": "Apple-M5-Max_ornith-ai-Ornith-1.5-35B-A3B-GGUF_20260830-070631",
+  "measured_at": "2026-08-30T07:06:31.360074+00:00",
+  "task": {
+    "name": "contract-terms-json-ja",
+    "file": "contract-terms-json-ja.yaml",
+    "samples_per_level": 12,
+    "seed": 405,
+    "same_truth_different_wording_per_level": true
+  },
+  "model": "ornith-ai/Ornith-1.5-35B-A3B-GGUF",
+  "endpoint": "http://127.0.0.1:8888/v1",
+  "server_label": "Unsloth Studio",
+  "machine": {
+    "os": "Darwin 25.5.0",
+    "arch": "arm64",
+    "python": "3.12.13",
+    "cpu": "Apple M5 Max",
+    "memory_gb": 128
+  },
+  "slo": {
+    "pass_rate": 0.9,
+    "ttft_p95_s": 4.0,
+    "e2e_p95_s": 20.0,
+    "error_rate": 0.0
+  },
+  "levels": [
+    {
+      "concurrency": 1,
+      "requests": 12,
+      "wall_s": 56.19,
+      "ttft_p50_s": 3.017,
+      "ttft_p95_s": 5.732,
+      "e2e_p50_s": 3.893,
+      "e2e_p95_s": 6.652,
+      "output_tokens": 4124,
+      "throughput_tok_s": 73.399,
+      "pass_rate": 1.0,
+      "passed": 12,
+      "error_rate": 0.0,
+      "errors": 0,
+      "pass_rate_lo": 0.758,
+      "pass_rate_hi": 1.0,
+      "verdict": "応答が遅い",
+      "accuracy_inconclusive": false
+    }
+  ],
+  "max_ok_concurrency": null
+}

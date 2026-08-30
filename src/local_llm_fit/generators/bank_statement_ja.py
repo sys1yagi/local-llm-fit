@@ -22,7 +22,7 @@ SUFFIX = ["", " 手数料込", " 取扱", " 定期", " 当月分", " ﾃｽｳ�
 
 def _truth(seed: int, index: int) -> dict:
     rng = random.Random(f"{seed}/bs/truth/{index}")
-    n = rng.randint(15, 22)
+    n = rng.randint(8, 10)
     start = dates.pick(rng, months=(1, 11)).replace(day=1)
 
     names = [companies.canonical(b, p)

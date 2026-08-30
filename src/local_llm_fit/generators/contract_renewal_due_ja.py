@@ -22,7 +22,7 @@ KINDS = ["業務委託", "賃貸借", "保守", "ライセンス", "売買基本
 def _truth(seed: int, index: int) -> dict:
     rng = random.Random(f"{seed}/crd/truth/{index}")
     basis = dates.pick(rng, months=(2, 9))
-    n = rng.randint(18, 22)
+    n = rng.randint(9, 11)
 
     rows = []
     for base, pos in companies.pick_with_position(rng, n):

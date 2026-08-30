@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "run_id": "Apple-M5-Max_google-gemma-4-31b-qat_20260829-063833",
+  "measured_at": "2026-08-29T06:38:33.953880+00:00",
+  "task": {
+    "name": "contract-terms-json-ja",
+    "file": "contract-terms-json-ja.yaml",
+    "samples_per_level": 12,
+    "seed": 405,
+    "same_truth_different_wording_per_level": true
+  },
+  "model": "google/gemma-4-31b-qat",
+  "endpoint": "http://localhost:1234/v1",
+  "server_label": "LM Studio",
+  "machine": {
+    "os": "Darwin 25.5.0",
+    "arch": "arm64",
+    "python": "3.12.13",
+    "cpu": "Apple M5 Max",
+    "memory_gb": 128
+  },
+  "slo": {
+    "pass_rate": 0.9,
+    "ttft_p95_s": 4.0,
+    "e2e_p95_s": 20.0,
+    "error_rate": 0.0
+  },
+  "levels": [
+    {
+      "concurrency": 1,
+      "requests": 12,
+      "wall_s": 705.14,
+      "ttft_p50_s": 50.948,
+      "ttft_p95_s": 54.504,
+      "e2e_p50_s": 58.833,
+      "e2e_p95_s": 62.147,
+      "output_tokens": 8758,
+      "throughput_tok_s": 12.42,
+      "pass_rate": 1.0,
+      "passed": 12,
+      "error_rate": 0.0,
+      "errors": 0,
+      "pass_rate_lo": 0.758,
+      "pass_rate_hi": 1.0,
+      "verdict": "応答が遅い",
+      "accuracy_inconclusive": false
+    }
+  ],
+  "max_ok_concurrency": null
+}

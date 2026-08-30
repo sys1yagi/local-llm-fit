@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "run_id": "Apple-M5-Max_poolside-laguna-s-2.1_20260829-092035",
+  "measured_at": "2026-08-29T09:20:35.078678+00:00",
+  "task": {
+    "name": "contract-terms-json-ja",
+    "file": "contract-terms-json-ja.yaml",
+    "samples_per_level": 12,
+    "seed": 405,
+    "same_truth_different_wording_per_level": true
+  },
+  "model": "poolside/laguna-s-2.1",
+  "endpoint": "http://localhost:1234/v1",
+  "server_label": "LM Studio",
+  "machine": {
+    "os": "Darwin 25.5.0",
+    "arch": "arm64",
+    "python": "3.12.13",
+    "cpu": "Apple M5 Max",
+    "memory_gb": 128
+  },
+  "slo": {
+    "pass_rate": 0.9,
+    "ttft_p95_s": 4.0,
+    "e2e_p95_s": 20.0,
+    "error_rate": 0.0
+  },
+  "levels": [
+    {
+      "concurrency": 1,
+      "requests": 12,
+      "wall_s": 526.9,
+      "ttft_p50_s": 20.841,
+      "ttft_p95_s": 24.678,
+      "e2e_p50_s": 25.046,
+      "e2e_p95_s": 140.747,
+      "output_tokens": 14119,
+      "throughput_tok_s": 26.797,
+      "pass_rate": 0.667,
+      "passed": 8,
+      "error_rate": 0.0,
+      "errors": 0,
+      "pass_rate_lo": 0.391,
+      "pass_rate_hi": 0.862,
+      "verdict": "正答率・応答とも足りない",
+      "accuracy_inconclusive": false
+    }
+  ],
+  "max_ok_concurrency": null
+}
