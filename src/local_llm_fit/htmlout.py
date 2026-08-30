@@ -62,6 +62,12 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9
        font-size: 12px; line-height: 1.6; white-space: pre-wrap;
        word-break: break-all; }
 .empty { color: #6b7681; font-size: 14px; }
+.matrix { table-layout: fixed; }
+.matrix th { white-space: normal; font-size: 11px; word-break: break-all;
+             text-align: center; }
+.matrix td { text-align: center; }
+.matrix th:first-child, .matrix td:first-child { text-align: left; width: 22%; }
+.matrix .gap { color: #b9c0c7; }
 .headline { font-size: 21px; font-weight: 700; margin: 14px 0 2px; color: #16406e; }
 .sub { font-size: 12px; color: #6b7681; margin: 0 0 12px; }
 .reading { font-size: 15px; margin: 0 0 6px; padding: 12px 14px;

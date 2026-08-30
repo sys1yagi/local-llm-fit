@@ -132,6 +132,12 @@ class Docs:
         return section(self.readme_md, "結果を持ち寄る")
 
     @property
+    def share_invite(self) -> str:
+        """結果を送ってほしいという呼びかけ。「結果を持ち寄る」の最初の段落。"""
+        paragraphs = [p for p in self.share_howto.split("\n\n") if p.strip()]
+        return paragraphs[0] if paragraphs else ""
+
+    @property
     def measured_values(self) -> str:
         """p95 や区間の定義。METHOD.md の「測っている値」から。"""
         return section(self.method_md, "測っている値")

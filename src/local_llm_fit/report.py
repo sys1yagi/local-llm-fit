@@ -75,7 +75,7 @@ def summarize_level(level: dict, graded: list[dict], slo: dict) -> dict:
     lo, hi = wilson_interval(passed, n)
     row["pass_rate_lo"] = round(lo, 3)
     row["pass_rate_hi"] = round(hi, 3)
-    row["verdict"] = _verdict(row, slo)
+    row["verdict"] = verdict(row, slo)
     # 点推定では基準を割っているが、区間の上端は基準を超えている行。
     # 「足りない」と断定するには件数が足りない。
     row["accuracy_inconclusive"] = (
@@ -89,7 +89,7 @@ def _r(v):
     return None if v is None else round(v, 3)
 
 
-def _verdict(row: dict, slo: dict) -> str:
+def verdict(row: dict, slo: dict) -> str:
     """どの基準を割ったのかを、そのまま言葉にして返す。
 
     正答率と応答時間は落ちる理由が違う。ひとまとめの判定にすると、
@@ -109,6 +109,31 @@ def _verdict(row: dict, slo: dict) -> str:
     if slow:
         return VERDICT_SLOW
     return VERDICT_OK
+
+
+def judge_levels(rows: list[dict], slo: dict) -> tuple[list[int], list[int]]:
+    """基準に照らして、同時本数を2つに仕分ける。
+
+    返すのは (満たした本数, 判断できない本数)。
+    2つめは、応答時間は基準内で、正答率の点推定は基準を割っているものの、
+    95%区間の上端が基準を超えている行（表の `※`）。件数が足りないだけで
+    実は満たしているかもしれないので、満たしたとは数えず別に見せる。
+
+    判定は測ったときの基準ではなく、渡した基準でやり直す。
+    タスク定義の `slo` はあとから書き換わることがあり、
+    いま並べて比べるなら同じ物差しを当てる必要があるため。
+    """
+    met: list[int] = []
+    unsure: list[int] = []
+    for row in rows:
+        got = verdict(row, slo)
+        if got == VERDICT_OK:
+            met.append(row["concurrency"])
+        elif (got == VERDICT_LOW_ACCURACY
+              and row.get("pass_rate_hi") is not None
+              and row["pass_rate_hi"] >= slo.get("pass_rate", 1.0)):
+            unsure.append(row["concurrency"])
+    return met, unsure
 
 
 def to_markdown(rows: list[dict]) -> str:
