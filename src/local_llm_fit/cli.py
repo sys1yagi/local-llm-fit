@@ -210,7 +210,9 @@ def _cmd_measure(argv: list[str]) -> None:
     ap.add_argument("--concurrency", default="1,2,4,8", help="振る同時実行数（カンマ区切り）")
     ap.add_argument("--samples", type=int, default=None, help="サンプル数（タスク定義を上書き）")
     ap.add_argument("--seed", type=int, default=None, help="乱数 seed（タスク定義を上書き）")
-    ap.add_argument("--timeout", type=float, default=300.0, help="1リクエストのタイムアウト秒")
+    ap.add_argument("--timeout", type=float, default=300.0,
+                    help="1件をあきらめるまでの秒数。超えた件は時間超過として、"
+                         "誤答とは別に数える")
     ap.add_argument("--label", default=None, help="機材の表示名（結果ファイル名に使う）")
     ap.add_argument("--server-label", default=None,
                     help="推論サーバの種別を自由記述で残す（例: LM Studio 0.3 / vLLM 0.9）。"
@@ -276,7 +278,8 @@ def _cmd_measure(argv: list[str]) -> None:
         for call in level_result["calls"]:
             truth = truth_by_id[call.sample_id]
             if call.error:
-                graded.append({"ok": False, "reason": "request_error",
+                graded.append({"ok": False,
+                               "reason": "timeout" if call.timed_out else "request_error",
                                "mismatches": [call.error]})
             else:
                 graded.append(grading_mod.grade(

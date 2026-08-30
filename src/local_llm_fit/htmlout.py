@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from html import escape
 
-from . import svg
+from . import report, svg
 
 PAGE_CSS = """
 :root { color-scheme: light; }
@@ -176,6 +176,9 @@ def _table(summary: dict) -> str:
         footnote = ('<p class="note"><span class="mark">※</span> '
                     "正答率の95%区間の上端が基準を超えている行。"
                     "基準を割ったと断定するには件数が足りない。</p>")
+    unmeasured = report.unmeasured_note(summary["levels"])
+    if unmeasured:
+        footnote += f'<p class="note">{escape(unmeasured)}</p>'
     return (
         "<table><thead><tr>"
         "<th>同時に投げた本数</th><th>最初の文字まで</th><th>返り終わるまで</th>"

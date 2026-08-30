@@ -9,6 +9,10 @@ GuideLLM のような専用ツールに差し替えられるよう、採点と�
 省略するため、後の行ほど速く見える。入力2万字のタスクでは、同じ4本同時が
 初見59.7秒・2回目0.40秒に分かれた。
 
+1件が返り終わらないまま `--timeout` 秒に達したら、その件は打ち切る。
+打ち切った件には印を付けて、誤答とは別に数える。答えの質を測れていない
+状態なので、正答率の分子にも「間違えた」の数にも入れない。
+
 「最初の文字が出るまで」は、答えの本文の1文字目が届いた時刻で測る。
 推論モデルが思考トークンを先に吐く場合、本文が出るまでの時間がここに乗る。
 それは測定の誤りではなく、利用者が実際に待つ時間なので、そのまま測る。
@@ -34,6 +38,7 @@ class Call:
     error: str | None = None
     chunks: int = 0
     usage: dict = field(default_factory=dict)
+    timed_out: bool = False
 
 
 async def _one(client: httpx.AsyncClient, base_url: str, model: str,
@@ -49,7 +54,10 @@ async def _one(client: httpx.AsyncClient, base_url: str, model: str,
     }
     started = time.perf_counter()
     try:
-        async with client.stream(
+        # httpx のタイムアウトは、ストリームでは「次の断片が来るまで」にしか
+        # 効かない。断片が出続けるかぎり何分でも走るので、1件の総時間の上限は
+        # ここで別に掛ける。
+        async with asyncio.timeout(timeout_s), client.stream(
             "POST", f"{base_url}/chat/completions", json=body,
             timeout=httpx.Timeout(timeout_s, connect=10.0),
         ) as resp:
@@ -77,7 +85,13 @@ async def _one(client: httpx.AsyncClient, base_url: str, model: str,
                             call.ttft_s = time.perf_counter() - started
                         call.content += piece
                         call.chunks += 1
+    except TimeoutError:
+        # 打ち切りは、答えの中身が悪かったのではなく待てなかったということ。
+        # 誤答と混ぜないよう、印を付けて別に数える。
+        call.timed_out = True
+        call.error = f"打ち切り: {timeout_s:.0f}秒を超えた"
     except (httpx.TimeoutException, httpx.HTTPError) as e:
+        call.timed_out = isinstance(e, httpx.TimeoutException)
         call.error = f"{type(e).__name__}: {e}"[:200]
 
     call.e2e_s = time.perf_counter() - started

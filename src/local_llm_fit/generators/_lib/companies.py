@@ -45,6 +45,20 @@ def variants(base: str, position: str) -> list[str]:
     return out
 
 
+# 頭が姓と同じ社名。人の名前と会社の名前を見分けさせたいときに使う。
+# 左が姓（_lib.people か、それに準じる姓）、右が BASE にある社名。
+SURNAME_HEADED = [
+    ("山下", "山下テクノ"), ("早川", "早川精機"), ("篠塚", "篠塚エンジ"),
+    ("小暮", "小暮フーズ"), ("白岩", "白岩印刷"), ("藤島", "藤島鋼材"),
+    ("寺岡", "寺岡テック"), ("五十嵐", "五十嵐興業"),
+]
+
+
+def surname_headed(rng: random.Random, n: int = 1) -> list[tuple[str, str]]:
+    """(姓, その姓で始まる社名) を n 組。"""
+    return rng.sample(SURNAME_HEADED, n)
+
+
 def pick_with_position(rng: random.Random, n: int) -> list[tuple[str, str]]:
     """(社名の本体, 法人格の位置) を n 件。位置は社名ごとに固定する。"""
     return [(b, rng.choice([FRONT, BACK])) for b in distinct(rng, n)]

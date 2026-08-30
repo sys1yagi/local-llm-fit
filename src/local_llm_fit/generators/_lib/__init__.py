@@ -5,6 +5,18 @@
 どの関数も乱数を引数で受け取るだけで、内部に状態を持たない。
 """
 
-from . import companies, dates, depts, items, money, people, quantities
+from . import (
+    addresses,
+    companies,
+    dates,
+    depts,
+    emails,
+    items,
+    money,
+    people,
+    phones,
+    quantities,
+)
 
-__all__ = ["companies", "dates", "depts", "items", "money", "people", "quantities"]
+__all__ = ["addresses", "companies", "dates", "depts", "emails", "items",
+           "money", "people", "phones", "quantities"]

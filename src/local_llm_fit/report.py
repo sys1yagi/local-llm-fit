@@ -71,6 +71,11 @@ def summarize_level(level: dict, graded: list[dict], slo: dict) -> dict:
         "passed": passed,
         "error_rate": round(error_rate, 3),
         "errors": len(errors),
+        # 時間超過と空応答は、そのモデルの答えの質を測れていない件。
+        # 誤答と混ぜて読まないよう、正答率とは別に数えておく。
+        "timeouts": sum(1 for c in calls if getattr(c, "timed_out", False)),
+        "empty_responses": sum(1 for g in graded
+                               if g.get("reason") == "empty_response"),
     }
     lo, hi = wilson_interval(passed, n)
     row["pass_rate_lo"] = round(lo, 3)
@@ -158,7 +163,28 @@ def to_markdown(rows: list[dict]) -> str:
     if any(r.get("accuracy_inconclusive") for r in rows):
         lines.append("※ 正答率の95%区間の上端が基準を超えている行。"
                      "基準を割ったと断定するには件数が足りない。")
+    note = unmeasured_note(rows)
+    if note:
+        lines.append(note)
     return "\n".join(lines)
+
+
+def unmeasured_note(rows: list[dict]) -> str:
+    """時間超過と空応答の件数。無ければ空文字。
+
+    どちらも答えの質を測れていない件なので、誤答とは別に置く。
+    """
+    timeouts = sum(r.get("timeouts") or 0 for r in rows)
+    empties = sum(r.get("empty_responses") or 0 for r in rows)
+    if not timeouts and not empties:
+        return ""
+    got = []
+    if timeouts:
+        got.append(f"時間超過 {timeouts}件")
+    if empties:
+        got.append(f"空応答 {empties}件")
+    return ("・".join(got) + "。そのモデルの答えの質を測れていない件で、"
+            "不正解の中に入っている。採否の根拠には使えない。")
 
 
 def _s(v) -> str:

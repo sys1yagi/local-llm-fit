@@ -1,0 +1,81 @@
+name: payslip-json-ja
+# 生成器・採点・指示文のどれかを変えたら上げる（README「タスクのversion」）
+version: 1
+title: 給与明細を項目ごとのJSONにする
+description: |
+  労務の確認作業。給与明細1枚を渡し、支給と控除の項目をJSONにさせる。
+  難所は2つ。項目の呼び名が明細ごとに揺れているので（残業手当／超過勤務手当、
+  厚年／厚生年金保険料）、決められた項目名に寄せる必要がある。
+  控除は文面では正の数で書かれていることが多く、▲や括弧で書かれることもあるので、
+  どの書き方でも負の数に直す必要がある。
+
+generator:
+  module: payslip_ja
+  samples: 12
+  seed: 412
+
+request:
+  temperature: 0
+  # 上限は答えを切らないための安全弁。思考を先に吐くモデルは思考分もここから使う
+  max_tokens: 4096
+
+prompt: |
+  次の給与明細をJSONにしてください。JSONだけを出力してください。
+
+  注意:
+  - 明細の項目名は書き方が揺れています。同じ意味のものは、下の一覧の表記に
+    直してください
+  - 控除の項目は金額を負の数にしてください。明細で正の数や「▲」「()」で
+    書かれていても、負の数に直します
+  - 支給の項目を明細に出てくる順に並べ、続けて控除の項目を明細に出てくる順に
+    並べてください
+  - 合計の3つは正の整数にしてください
+
+  ［項目名の一覧］
+  支給: 基本給 / 役職手当 / 時間外手当 / 住宅手当 / 通勤手当
+  控除: 健康保険料 / 厚生年金保険料 / 雇用保険料 / 所得税 / 住民税
+
+  キーは次のとおりにしてください。
+  - employee: 氏名（「様」は含めない）
+  - pay_month: 対象月（YYYY-MM の文字列）
+  - items: 項目の配列。各要素は name（上の一覧の表記）, amount（整数。控除は負の数）
+  - total_payment: 支給合計（正の整数）
+  - total_deduction: 控除合計（正の整数）
+  - net_payment: 差引支給額（正の整数）
+
+  金額はカンマや「円」を含めない整数にしてください。
+
+  {input}
+
+schema:
+  type: object
+  required: [employee, pay_month, items, total_payment, total_deduction, net_payment]
+  properties:
+    employee: {type: string}
+    pay_month: {type: string}
+    total_payment: {type: integer}
+    total_deduction: {type: integer}
+    net_payment: {type: integer}
+    items:
+      type: array
+      minItems: 1
+      items:
+        type: object
+        required: [name, amount]
+        properties:
+          name: {type: string}
+          amount: {type: integer}
+
+# 採点。全項目が、並び順も含めて一致したら合格。
+grading:
+  collapse_whitespace: true
+  scalar_fields: [employee, pay_month, total_payment, total_deduction, net_payment]
+  item_fields: [name, amount]
+
+# 「使える」と言える基準。仮置き。
+# 入力は400字ほどだが、8〜10項目を書き出すので出力はやや長い。
+slo:
+  pass_rate: 0.90      # 正しくJSONにできた件数の割合
+  ttft_p95_s: 2.5      # 最初の文字が出るまで（p95）
+  e2e_p95_s: 30.0      # 返り終わるまで（p95）
+  error_rate: 0.0      # 接続エラー・タイムアウトの割合
