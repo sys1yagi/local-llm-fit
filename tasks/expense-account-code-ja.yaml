@@ -1,4 +1,6 @@
 name: expense-account-code-ja
+# 生成器・採点・指示文のどれかを変えたら上げる（README「タスクのversion」）
+version: 1
 title: 経費申請に勘定科目を1つ付ける
 description: |
   経理の仕訳。経費申請1件と社内規程を渡し、勘定科目を1語で返させる。

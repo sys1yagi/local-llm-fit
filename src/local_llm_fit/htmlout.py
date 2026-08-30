@@ -100,7 +100,8 @@ def _tok(v: float) -> str:
 def _task_label(summary: dict) -> str:
     t = summary["task"]
     n = t.get("samples_per_level") or t.get("samples")
-    return f"{t['name']}（{n}件 × {len(summary['levels'])}行 / seed {t['seed']}）"
+    ver = f" / 定義 version {t['version']}" if t.get("version") else ""
+    return f"{t['name']}（{n}件 × {len(summary['levels'])}行 / seed {t['seed']}{ver}）"
 
 
 def _charts(summary: dict) -> str:
@@ -233,6 +234,7 @@ def render_report(summary: dict, calls: list[dict] | None = None,
     answer = (f"基準をすべて満たした最大の同時実行数: {fit}本"
               if fit else "基準をすべて満たした同時実行数はありませんでした")
 
+    env = summary.get("environment") or {}
     meta_rows = [
         ("仕事", _task_label(summary)),
         ("モデル", summary.get("model", "-")),
@@ -245,6 +247,16 @@ def render_report(summary: dict, calls: list[dict] | None = None,
         ])) or "-"),
         ("測定日時", summary.get("measured_at", "-")),
     ]
+    # 環境の節は version を刻んだあとの測定にだけ入っている。
+    # 旧形式は行ごと出さない（「unknown」が並ぶだけになるため）。
+    if env:
+        timeout = env.get("request_timeout_s")
+        meta_rows += [
+            ("量子化", env.get("quantization", "unknown")),
+            ("サーバ側の同時処理数", env.get("server_concurrency", "unknown")),
+            ("電源", env.get("power", "unknown")),
+            ("1件の打ち切り", f"{timeout:.0f}秒" if timeout else "なし"),
+        ]
     meta = "".join(f"<dt>{escape(k)}</dt><dd>{escape(str(v))}</dd>"
                    for k, v in meta_rows)
 

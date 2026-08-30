@@ -1,4 +1,6 @@
 name: expense-category-total-ja
+# 生成器・採点・指示文のどれかを変えたら上げる（README「タスクのversion」）
+version: 1
 title: 経費明細をカテゴリごとに合計する
 description: |
   経理の月次集計。20〜30行の経費明細を渡し、勘定科目ごとの合計を返させる。

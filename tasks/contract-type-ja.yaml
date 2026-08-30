@@ -1,4 +1,6 @@
 name: contract-type-ja
+# 生成器・採点・指示文のどれかを変えたら上げる（README「タスクのversion」）
+version: 1
 title: 契約書の種別を、表題ではなく中身で判定する
 description: |
   法務の受付。契約書の抜粋を渡し、種別を1語で返させる。

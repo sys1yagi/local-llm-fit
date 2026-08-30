@@ -1,0 +1,34 @@
+name: results-check
+
+# 持ち寄られた結果JSONを点検する。
+# 見つけた点は警告として出すだけで、プルリクエストは落とさない。
+# 同じことは手元でもできる: uv run fit check results/*.json
+
+on:
+  pull_request:
+    paths:
+      - "results/**.json"
+      - "tasks/**.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: 結果JSONを点検する
+        run: |
+          shopt -s nullglob
+          files=(results/*.json)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "results/ にJSONがありません"
+            exit 0
+          fi
+          uv run fit check --github "${files[@]}" | tee "$GITHUB_STEP_SUMMARY"

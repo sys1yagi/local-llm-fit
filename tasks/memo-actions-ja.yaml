@@ -1,4 +1,6 @@
 name: memo-actions-ja
+# 生成器・採点・指示文のどれかを変えたら上げる（README「タスクのversion」）
+version: 1
 title: 打ち合わせメモから、誰がいつまでに何をやるかを取り出す
 description: |
   会議のあとの宿題出し。短いメモを渡し、宿題を引き受けた人と期限を

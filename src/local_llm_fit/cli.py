@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -10,12 +11,14 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
 import yaml
 
 from . import grade as grading_mod
 from . import htmlout
 from . import report as report_mod
 from . import run as run_mod
+from . import validate as validate_mod
 
 DEFAULT_BASE_URL = "http://localhost:1234/v1"
 ROOT = Path(__file__).resolve().parents[2]
@@ -55,6 +58,47 @@ def _machine() -> dict:
     return info
 
 
+def _power_state() -> str:
+    """電源につながっているか、バッテリーで動いているか。
+
+    ノートPCをバッテリーで動かすと、機材によっては性能に上限がかかる。
+    結果を見比べるときに要る情報なので、取れる環境では自動で記録する。
+    """
+    if platform.system() != "Darwin":
+        return "unknown"
+    try:
+        out = subprocess.run(
+            ["pmset", "-g", "batt"],
+            capture_output=True, text=True, timeout=5, check=False,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    if "'AC Power'" in out:
+        return "電源に接続"
+    if "'Battery Power'" in out:
+        return "バッテリー駆動"
+    return "unknown"
+
+
+def _quantization_from_api(base_url: str, model: str) -> str | None:
+    """/v1/models が量子化を返すサーバなら、そこから読む。返さなければ None。
+
+    OpenAI 互換の仕様には無い項目なので、返さないサーバの方が多い。
+    その場合は --quantization で受け取る。
+    """
+    try:
+        resp = httpx.get(f"{base_url}/models", timeout=5.0)
+        if resp.status_code != 200:
+            return None
+        for entry in resp.json().get("data") or []:
+            if entry.get("id") == model:
+                quant = entry.get("quant") or entry.get("quantization")
+                return str(quant) if quant else None
+    except (httpx.HTTPError, ValueError, AttributeError):
+        return None
+    return None
+
+
 def _read_calls(run_id: str) -> list[dict] | None:
     """runs/ に生データが残っていれば読む。無ければ None。"""
     path = RUNS / run_id / "calls.jsonl"
@@ -78,6 +122,8 @@ def main() -> None:
         return _cmd_report(argv[1:])
     if argv and argv[0] == "pages":
         return _cmd_pages(argv[1:])
+    if argv and argv[0] == "check":
+        return _cmd_check(argv[1:])
     return _cmd_measure(argv)
 
 
@@ -119,6 +165,39 @@ def _cmd_pages(argv: list[str]) -> None:
           f"モデル {got['models']} / 機材 {got['machines']}）")
 
 
+def _cmd_check(argv: list[str]) -> None:
+    ap = argparse.ArgumentParser(
+        prog="fit check",
+        description="results/ のJSONを点検する。おかしな点は警告として並べ、"
+                    "終了コードは0のままにする",
+    )
+    ap.add_argument("json_files", nargs="+", help="results/ のJSON（複数可）")
+    ap.add_argument("--github", action="store_true",
+                    help="GitHub Actions の警告注釈の形で出す")
+    args = ap.parse_args(argv)
+
+    as_annotation = args.github or os.environ.get("GITHUB_ACTIONS") == "true"
+    total = 0
+    for name in args.json_files:
+        path = Path(name)
+        warnings = validate_mod.check_file(path, ROOT / "tasks")
+        total += len(warnings)
+        rel = path.relative_to(ROOT) if path.is_absolute() and path.is_relative_to(ROOT) else path
+        if not warnings:
+            print(f"{rel}: 問題なし")
+            continue
+        for w in warnings:
+            if as_annotation:
+                print(f"::warning file={rel}::{w}")
+            else:
+                print(f"{rel}: {w}")
+
+    print(f"\n{len(args.json_files)}件を点検し、警告 {total}件。")
+    if total:
+        print("警告は投稿を止めるものではありません。"
+              "心当たりがなければそのまま送ってください。")
+
+
 def _cmd_measure(argv: list[str]) -> None:
     ap = argparse.ArgumentParser(
         prog="fit",
@@ -136,6 +215,15 @@ def _cmd_measure(argv: list[str]) -> None:
     ap.add_argument("--server-label", default=None,
                     help="推論サーバの種別を自由記述で残す（例: LM Studio 0.3 / vLLM 0.9）。"
                          "自動では判別しない")
+    ap.add_argument("--quantization", default=None,
+                    help="量子化の表記（例: Q4_K_M / MLX 4bit / BF16）。"
+                         "APIが返すサーバなら省略できる")
+    ap.add_argument("--server-concurrency", default=None,
+                    help="推論サーバ側で設定した同時処理数（例: 4）。"
+                         "APIからは取れないので、設定した値を書き添える")
+    ap.add_argument("--power", default=None,
+                    help="電源の状態（例: 電源に接続 / バッテリー駆動）。"
+                         "macOS では省略すると自動で記録する")
     ap.add_argument("--dry-run", action="store_true", help="入力を1件表示して終わる")
     args = ap.parse_args(argv)
 
@@ -227,16 +315,30 @@ def _cmd_measure(argv: list[str]) -> None:
     label = args.label or _machine().get("cpu", platform.machine()).replace(" ", "-")
     slug = f"{label}_{args.model.replace('/', '-')}_{stamp}"
 
+    # 後から結果どうしを比べられるようにするための情報。
+    # 分からないものは "unknown" で埋めて、測定そのものは止めない。
+    environment = {
+        "server": args.server_label or "unknown",
+        "quantization": (args.quantization
+                         or _quantization_from_api(args.base_url.rstrip("/"), args.model)
+                         or "unknown"),
+        "server_concurrency": args.server_concurrency or "unknown",
+        "power": args.power or _power_state(),
+        "request_timeout_s": args.timeout,
+    }
+
     summary = {
-        "schema_version": 1,
+        "schema_version": 2,
         "run_id": slug,
         "measured_at": datetime.now(UTC).isoformat(),
         "task": {"name": task["name"], "file": task_path.name,
+                 "version": task.get("version"),
                  "samples_per_level": samples_n, "seed": seed,
                  "same_truth_different_wording_per_level": True},
         "model": args.model,
         "endpoint": args.base_url,
         "server_label": args.server_label,
+        "environment": environment,
         "machine": _machine(),
         "slo": slo,
         "levels": rows,
