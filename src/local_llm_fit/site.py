@@ -23,7 +23,7 @@ from pathlib import Path
 
 import yaml
 
-from . import htmlout, mdlite
+from . import docsrc, htmlout, mdlite
 from . import report as report_mod
 from .docsrc import Docs
 
@@ -131,6 +131,36 @@ def _slo_of(summary: dict, tasks: dict[str, dict]) -> dict:
     return (task or {}).get("slo") or summary.get("slo") or {}
 
 
+def _version_of(task: dict | None) -> int:
+    """タスク定義の version。version を刻む前の定義は 1 と見なす。"""
+    return (task or {}).get("version") or 1
+
+
+def _comparable(summaries: list[dict],
+                tasks: dict[str, dict]) -> tuple[list[dict], list[dict]]:
+    """いまのタスク定義と同じ version で測ったものだけを残す。
+
+    version が違うのは、生成器・採点・指示文のどれかが変わったということ。
+    投げた仕事が別物なので、同じ表に並べると比べられない数字が混ざる。
+    残りは捨てずに返して、何件外したかをページに書けるようにする。
+    """
+    keep, dropped = [], []
+    for s in summaries:
+        current = _version_of(tasks.get(s["task"]["name"]))
+        measured = (s.get("task") or {}).get("version") or 1
+        (keep if measured == current else dropped).append(s)
+    return keep, dropped
+
+
+def _version_note(dropped: list[dict]) -> str:
+    if not dropped:
+        return ""
+    return ('<p class="note">'
+            f"タスク定義が変わる前に測った結果が {len(dropped)}件ある。"
+            "投げた仕事が別物なので、この表には入れていない"
+            "（下の実測には残してある）。</p>")
+
+
 def _best_concurrency(summaries: list[dict], tasks: dict[str, dict],
                       key) -> tuple[dict, dict]:
     """組み合わせごとに、基準を満たした最大の同時本数を求める。
@@ -223,8 +253,9 @@ def _coverage(scen: list[dict], tasks: dict[str, dict],
     for s in measurable:
         cells = []
         for m in models:
-            got = [r for r in by_task.get(s["id"], [])
-                   if (r.get("model") or "不明") == m]
+            got, _ = _comparable(
+                [r for r in by_task.get(s["id"], [])
+                 if (r.get("model") or "不明") == m], tasks)
             if not got:
                 cells.append('<td class="gap">—</td>')
                 continue
@@ -264,14 +295,7 @@ def _index(docs: Docs, scen: list[dict], counts: dict[str, int],
         _nav("index.html"),
         "<h1>local-llm-fit</h1>",
         mdlite.render(docs.readme_opening, LINK_MAP),
-    ]
-    if coverage:
-        body += [
-            "<h2>測られている組み合わせ</h2>",
-            coverage,
-            mdlite.render(docs.share_invite, LINK_MAP),
-        ]
-    body += [
+        coverage,
         "<h2>シナリオ</h2>",
         "<table><thead><tr><th>族</th><th>シナリオ</th><th>状態</th>"
         "<th>実測（モデル×機材の組数）</th></tr></thead><tbody>"
@@ -286,6 +310,7 @@ def _scenario_page(docs: Docs, s: dict, task: dict | None,
                    reverse: str = "") -> str:
     facts = [
         ("族", f"{s['family_code']}. {s['family_name']}"),
+        ("実務区分", s["practical"]),
         ("状態", s["state"]),
         ("仕事の内容", s["work"]),
         ("採点", s["grading"]),
@@ -300,10 +325,7 @@ def _scenario_page(docs: Docs, s: dict, task: dict | None,
         _nav(""),
         (f"<h1>{escape(s['work'])}<br>"
          f'<span class="sub-id"><code>{escape(s["id"])}</code></span></h1>'),
-    ]
-    if reverse:
-        body += ["<h2>この業務が基準を満たした構成</h2>", reverse]
-    body += [
+        reverse,
         "<h2>カタログの記載</h2>",
         ('<p class="note">出典: '
          '<a href="catalog.html">業務シナリオのカタログ</a></p>'),
@@ -358,15 +380,12 @@ def _scenario_page(docs: Docs, s: dict, task: dict | None,
 
 def _axis_page(docs: Docs, title: str,
                rows: list[tuple[str, str, dict]], right_label: str,
-               reverse: tuple[str, str] = ("", "")) -> str:
+               top_html: str = "") -> str:
     body = [
         _nav(""),
         f"<h1>{escape(title)}</h1>",
         f'<p class="lede">測定 {len(rows)}件</p>',
-    ]
-    if reverse[1]:
-        body += [f"<h2>{escape(reverse[0])}</h2>", reverse[1]]
-    body += [
+        top_html,
         "<h2>実測</h2>",
         _legend(docs),
         _measure_table(rows, "シナリオ", right_label),
@@ -441,7 +460,21 @@ def build(root: Path, outdir: Path) -> dict:
 
     written = []
 
-    coverage = _coverage(scen, tasks, by_task, sorted(by_model), model_href)
+    # 逆引きに載せるのは導入判断のシナリオだけ。参考は別の節にまとめる。
+    reference_ids = {s["id"] for s in scen if s["practical"] == docsrc.REFERENCE}
+    split_note = mdlite.render(docs.practical_split, LINK_MAP)
+    main_scen = [s for s in scen if s["id"] not in reference_ids]
+    ref_scen = [s for s in scen if s["id"] in reference_ids]
+
+    models = sorted(by_model)
+    coverage = _coverage(main_scen, tasks, by_task, models, model_href)
+    if coverage:
+        coverage = ("<h2>測られている組み合わせ</h2>" + coverage
+                    + mdlite.render(docs.share_invite, LINK_MAP))
+    ref_coverage = _coverage(ref_scen, tasks, by_task, models, model_href)
+    if ref_coverage:
+        coverage += ("<h2>参考: 実務ではコードでやる仕事</h2>" + split_note
+                     + ref_coverage)
     (outdir / "index.html").write_text(_index(docs, scen, counts, coverage),
                                        encoding="utf-8")
     written.append("index.html")
@@ -453,15 +486,21 @@ def build(root: Path, outdir: Path) -> dict:
         sample = _sample_of(root, task) if task else None
         reverse = ""
         if task or got:
+            fresh, stale = _comparable(got, tasks)
             met, unsure = _best_concurrency(
-                got, tasks, lambda r: (r.get("model") or "不明", _machine_label(r)))
-            reverse = _reverse_section(
-                [(model_cell(v["summary"]), machine_cell(v["summary"]),
-                  v["concurrency"], v["summary"]) for v in met.values()],
-                [(model_cell(v["summary"]), machine_cell(v["summary"]),
-                  v["concurrency"], v["summary"]) for v in unsure.values()],
-                "モデル", "機材",
-                "基準を満たした構成はまだありません。")
+                fresh, tasks, lambda r: (r.get("model") or "不明", _machine_label(r)))
+            is_ref = s["id"] in reference_ids
+            reverse = (
+                (f"<h2>参考: 実務ではコードでやる仕事</h2>{split_note}"
+                 if is_ref else "<h2>この業務が基準を満たした構成</h2>")
+                + _version_note(stale)
+                + _reverse_section(
+                    [(model_cell(v["summary"]), machine_cell(v["summary"]),
+                      v["concurrency"], v["summary"]) for v in met.values()],
+                    [(model_cell(v["summary"]), machine_cell(v["summary"]),
+                      v["concurrency"], v["summary"]) for v in unsure.values()],
+                    "モデル", "機材",
+                    "基準を満たした構成はまだありません。"))
         page = _scenario_page(docs, s, task, sample, rows, reverse)
         (outdir / f"s-{s['id']}.html").write_text(page, encoding="utf-8")
         written.append(f"s-{s['id']}.html")
@@ -474,17 +513,28 @@ def build(root: Path, outdir: Path) -> dict:
 
     for machine, rs in by_machine.items():
         rows = [(scenario_cell(r), model_cell(r), r) for r in rs]
-        met, unsure = _best_concurrency(
-            rs, tasks, lambda r: (r["task"]["name"], r.get("model") or "不明"))
-        reverse = _reverse_section(
-            [(scenario_cell(v["summary"]), model_cell(v["summary"]),
-              v["concurrency"], v["summary"]) for v in met.values()],
-            [(scenario_cell(v["summary"]), model_cell(v["summary"]),
-              v["concurrency"], v["summary"]) for v in unsure.values()],
-            "シナリオ", "モデル",
-            "この機材で基準を満たしたシナリオはまだありません。")
-        page = _axis_page(docs, machine, rows, "モデル",
-                          ("この機材で基準を満たすシナリオと同時本数", reverse))
+
+        def by_scenario(r: dict) -> tuple:
+            return (r["task"]["name"], r.get("model") or "不明")
+
+        def section(subset: list[dict], empty: str) -> str:
+            fresh, stale = _comparable(subset, tasks)
+            met, unsure = _best_concurrency(fresh, tasks, by_scenario)
+            return _version_note(stale) + _reverse_section(
+                [(scenario_cell(v["summary"]), model_cell(v["summary"]),
+                  v["concurrency"], v["summary"]) for v in met.values()],
+                [(scenario_cell(v["summary"]), model_cell(v["summary"]),
+                  v["concurrency"], v["summary"]) for v in unsure.values()],
+                "シナリオ", "モデル", empty)
+
+        main = [r for r in rs if r["task"]["name"] not in reference_ids]
+        ref = [r for r in rs if r["task"]["name"] in reference_ids]
+        top = ("<h2>この機材で基準を満たすシナリオと同時本数</h2>"
+               + section(main, "この機材で基準を満たしたシナリオはまだありません。"))
+        if ref:
+            top += ("<h2>参考: 実務ではコードでやる仕事</h2>" + split_note
+                    + section(ref, "基準を満たしたものはまだありません。"))
+        page = _axis_page(docs, machine, rows, "モデル", top)
         (outdir / machine_href[machine]).write_text(page, encoding="utf-8")
         written.append(machine_href[machine])
 

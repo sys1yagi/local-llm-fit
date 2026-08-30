@@ -42,7 +42,27 @@ ITEMS = [
     ("翻訳費用（英日）", 9500),
     ("保守作業 人件費", 55000),
     ("段ボール箱 Lサイズ", 320),
+    ("USBハブ 4ポート", 2980),
+    ("モニターアーム", 8600),
+    ("ホワイトボード 900x600", 15400),
+    ("電源タップ 6口", 1780),
+    ("ラベルプリンタ用テープ", 1450),
+    ("書類保管ボックス", 690),
+    ("サーバ監視 月額費用", 33000),
+    ("撮影スタジオ 利用料", 42000),
+    ("原稿執筆 委託費", 68000),
+    ("データ入力 作業費", 27500),
+    ("会場設営 人件費", 31000),
+    ("ドメイン更新料", 3800),
 ]
+
+# 1枚あたりの明細行数。実物は5〜10行が多く、まれに20行に届く。
+ITEM_COUNTS = [5, 6, 7, 8, 9, 10, 12, 15, 20]
+ITEM_COUNT_WEIGHTS = [4, 4, 4, 3, 3, 2, 2, 1, 1]
+
+# 値引き行の名前。金額は負になる。
+DISCOUNTS = ["お値引き", "特別値引", "キャンペーン割引", "端数調整"]
+DISCOUNT_RATIO = 0.35
 
 TAX_RATE = 0.10
 
@@ -74,7 +94,7 @@ def _date(rng: random.Random) -> tuple[str, str]:
 def _truth(seed: int, index: int) -> dict:
     """正解。(seed, サンプル番号) だけで決まるので、行番号によらず同じ。"""
     rng = random.Random(f"{seed}/invoice/truth/{index}")
-    n_items = rng.randint(1, 4)
+    n_items = rng.choices(ITEM_COUNTS, weights=ITEM_COUNT_WEIGHTS)[0]
     picked = rng.sample(ITEMS, n_items)
     items = []
     for name, unit_price in picked:
@@ -84,6 +104,16 @@ def _truth(seed: int, index: int) -> dict:
             "quantity": qty,
             "unit_price": unit_price,
             "amount": qty * unit_price,
+        })
+    # 値引き行。実物の請求書には負の金額の行が混じる。
+    if rng.random() < DISCOUNT_RATIO:
+        cut = -min(rng.randrange(1000, 30000, 500),
+                   sum(i["amount"] for i in items) // 2)
+        items.append({
+            "name": rng.choice(DISCOUNTS),
+            "quantity": 1,
+            "unit_price": cut,
+            "amount": cut,
         })
     subtotal = sum(i["amount"] for i in items)
     tax = int(subtotal * TAX_RATE)

@@ -14,7 +14,9 @@ FAMILY = re.compile(r"^## ([A-Z])\. (.+?)（\d+件）\s*$")
 HEADING = re.compile(r"^(#{1,4})\s+(.*)$")
 
 COLUMNS = ["id", "work", "grading", "input_len", "output_shape",
-           "difficulty", "parts", "state"]
+           "difficulty", "parts", "practical", "state"]
+
+REFERENCE = "参考"
 
 
 def _cells(line: str) -> list[str]:
@@ -130,6 +132,18 @@ class Docs:
     @property
     def share_howto(self) -> str:
         return section(self.readme_md, "結果を持ち寄る")
+
+    @property
+    def practical_split(self) -> str:
+        """導入判断と参考の分け方。カタログ「実務区分」の箇条書きから。"""
+        body = section(self.catalog_md, "実務区分")
+        kept: list[str] = []
+        for line in body.split("\n"):
+            if line.startswith("- **") or (kept and line.startswith("  ")):
+                kept.append(line)
+            elif kept:
+                break
+        return "\n".join(kept)
 
     @property
     def share_invite(self) -> str:
